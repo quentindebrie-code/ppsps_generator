@@ -1,6 +1,6 @@
 """
 app.py — Interface Streamlit pour la génération du PPSPS.
-Navigation par boutons Précédent / Suivant (session state).
+Navigation Précédent / Suivant avec persistance totale des données entre sections.
 """
 
 import io
@@ -10,7 +10,65 @@ from ppsps_generator import generer_ppsps
 
 st.set_page_config(page_title="Générateur PPSPS", page_icon="🏗️", layout="wide")
 
-# ── Constantes de navigation ───────────────────────────────────────────────
+# ════════════════════════════════════════════════════════════════════════════
+# PERSISTANCE — snapshot des valeurs de widgets avant qu'elles soient effacées
+# Streamlit supprime les clés de session_state des widgets non rendus.
+# On copie toutes les valeurs connues vers des clés _p_* qui, elles, persistent.
+# ════════════════════════════════════════════════════════════════════════════
+
+_STATIC_KEYS = [
+    # Entreprise & Projet
+    "ent_nom","ent_adresse","ent_tel","ent_email","ent_resp","ent_tel_resp","ent_email_resp",
+    "proj_intitule","proj_client","proj_situation","proj_type","proj_description",
+    "proj_debut","proj_duree","proj_effectif","proj_avis","proj_date_creation","acces_site",
+    # Gestion
+    "gest_elab","gest_verif","gest_appro","nb_rev",
+    "diff_moa","diff_moe","diff_mand","diff_cotrait","diff_st","diff_csps",
+    "diff_qse","diff_dir","diff_conducteur","diff_chef",
+    # Intervenants
+    "moa_nom","moa_adr","moa_int","moa_tel","moa_em",
+    "moe_nom","moe_adr","moe_int","moe_tel","moe_em",
+    "csps_nom","csps_adr","csps_int","csps_tel","csps_em",
+    "it_nom","it_adr","it_int","it_tel","it_em",
+    "med_nom","med_adr","med_int","med_tel","med_em",
+    # Organisation
+    "nb_membres",
+    "inst_charge","inst_bungalow","inst_remorque","inst_locaux","inst_autre",
+    "vest_nb","vest_surf","vest_com",
+    "ref_nb","ref_surf","ref_com",
+    "san_nb","san_surf","san_com",
+    "en_elec","en_group","en_gaz","eau","repas","date_inst",
+    # Secours
+    "sec_tel","sec_nom","sec_num","sec_adresse","sec_sst","sec_defib",
+    "epi_text","consignes_text","proprete_text","nb_sign",
+]
+
+_MAX_DYN = 25  # maximum pour les listes dynamiques
+
+def _snapshot():
+    """Copie toutes les valeurs de widgets actuellement en session vers les clés _p_."""
+    for k in _STATIC_KEYS:
+        if k in st.session_state:
+            st.session_state[f"_p_{k}"] = st.session_state[k]
+    for i in range(_MAX_DYN):
+        for k in [
+            f"rev_ind_{i}", f"rev_date_{i}", f"rev_nat_{i}",
+            f"role_{i}", f"membre_{i}",
+            f"sign_nom_{i}", f"sign_ent_{i}",
+            f"r_phase_{i}", f"r_facteur_{i}", f"r_sit_{i}",
+            f"r_risque_{i}", f"r_dang_{i}", f"r_expo_{i}", f"r_mes_{i}",
+        ]:
+            if k in st.session_state:
+                st.session_state[f"_p_{k}"] = st.session_state[k]
+
+_snapshot()   # ← exécuté à chaque render, AVANT le rendu des widgets
+
+# ── Raccourcis lecture / écriture persistance ─────────────────────────────
+def g(key, default=""):
+    """Lire la valeur persistée d'un champ (ou default si pas encore saisie)."""
+    return st.session_state.get(f"_p_{key}", default)
+
+# ── Constantes de navigation ──────────────────────────────────────────────
 TAB_NAMES = [
     "1 · Entreprise & Projet",
     "2 · Gestion & Diffusion",
@@ -23,20 +81,18 @@ TAB_NAMES = [
 ]
 N_TABS = len(TAB_NAMES)
 
-# ── Init session state ─────────────────────────────────────────────────────
+# ── Init session state ────────────────────────────────────────────────────
 if "tab" not in st.session_state:
     st.session_state.tab = 0
 if "nb_risques" not in st.session_state:
     st.session_state.nb_risques = 3
 if "annexes" not in st.session_state:
-    st.session_state.annexes = []   # list of {"titre": str, "file": UploadedFile}
+    st.session_state.annexes = []
 
-# ── Helpers navigation ─────────────────────────────────────────────────────
 def go_to(n):
     st.session_state.tab = n
 
 def nav_buttons(current):
-    """Barre précédent / suivant en bas de section."""
     st.write("")
     left, _, right = st.columns([1, 6, 1])
     if current > 0:
@@ -47,15 +103,14 @@ def nav_buttons(current):
                      on_click=go_to, args=(current + 1,), use_container_width=True,
                      type="primary")
 
-# ── En-tête + barre de navigation ─────────────────────────────────────────
+# ── En-tête + barre de navigation ────────────────────────────────────────
 st.title("🏗️ Générateur PPSPS")
 
-# Barre de tabs cliquables
 cols = st.columns(N_TABS)
 for i, (col, name) in enumerate(zip(cols, TAB_NAMES)):
-    btn_type = "primary" if i == st.session_state.tab else "secondary"
     col.button(name, key=f"nav_{i}", use_container_width=True,
-               type=btn_type, on_click=go_to, args=(i,))
+               type="primary" if i == st.session_state.tab else "secondary",
+               on_click=go_to, args=(i,))
 
 st.divider()
 tab = st.session_state.tab
@@ -67,33 +122,33 @@ tab = st.session_state.tab
 if tab == 0:
     st.subheader("Votre entreprise")
     c1, c2 = st.columns(2)
-    c1.text_input("Nom de l'entreprise",                       key="ent_nom")
-    c2.text_input("Adresse",                                    key="ent_adresse")
-    c1.text_input("Téléphone",                                  key="ent_tel")
-    c2.text_input("Email",                                      key="ent_email")
-    c1.text_input("Responsable technique / Chef de chantier",   key="ent_resp")
-    c2.text_input("Téléphone responsable",                      key="ent_tel_resp")
-    c1.text_input("Email responsable",                          key="ent_email_resp")
+    c1.text_input("Nom de l'entreprise",                      key="ent_nom",       value=g("ent_nom"))
+    c2.text_input("Adresse",                                   key="ent_adresse",   value=g("ent_adresse"))
+    c1.text_input("Téléphone",                                 key="ent_tel",       value=g("ent_tel"))
+    c2.text_input("Email",                                     key="ent_email",     value=g("ent_email"))
+    c1.text_input("Responsable technique / Chef de chantier",  key="ent_resp",      value=g("ent_resp"))
+    c2.text_input("Téléphone responsable",                     key="ent_tel_resp",  value=g("ent_tel_resp"))
+    c1.text_input("Email responsable",                         key="ent_email_resp",value=g("ent_email_resp"))
 
     st.divider()
     st.subheader("Informations projet")
     c1, c2 = st.columns(2)
-    c1.text_input("Intitulé du chantier",           key="proj_intitule")
-    c2.text_input("Client / Maître d'ouvrage",      key="proj_client")
-    c1.text_input("Situation des travaux (adresse)", key="proj_situation")
-    c2.text_input("Type d'ouvrage",                 key="proj_type")
-    st.text_area("Description des travaux", height=80, key="proj_description")
+    c1.text_input("Intitulé du chantier",            key="proj_intitule",  value=g("proj_intitule"))
+    c2.text_input("Client / Maître d'ouvrage",       key="proj_client",    value=g("proj_client"))
+    c1.text_input("Situation des travaux (adresse)",  key="proj_situation", value=g("proj_situation"))
+    c2.text_input("Type d'ouvrage",                  key="proj_type",      value=g("proj_type"))
+    st.text_area("Description des travaux", height=80, key="proj_description", value=g("proj_description"))
     c1, c2, c3 = st.columns(3)
-    c1.text_input("Date de début",          key="proj_debut")
-    c2.text_input("Durée d'intervention",   key="proj_duree")
-    c3.text_input("Effectif moyen propre",  key="proj_effectif")
+    c1.text_input("Date de début",         key="proj_debut",         value=g("proj_debut"))
+    c2.text_input("Durée d'intervention",  key="proj_duree",         value=g("proj_duree"))
+    c3.text_input("Effectif moyen propre", key="proj_effectif",      value=g("proj_effectif"))
     c1, c2 = st.columns(2)
-    c1.checkbox("Avis d'ouverture de chantier déposé", key="proj_avis")
-    c2.text_input("Date de création du document",      key="proj_date_creation")
+    c1.checkbox("Avis d'ouverture de chantier déposé", key="proj_avis",          value=g("proj_avis", False))
+    c2.text_input("Date de création du document",      key="proj_date_creation", value=g("proj_date_creation"))
 
     st.divider()
     st.subheader("Accès au site")
-    st.text_area("Description de l'accès", height=60, key="acces_site")
+    st.text_area("Description de l'accès", height=60, key="acces_site", value=g("acces_site"))
 
     nav_buttons(tab)
 
@@ -104,35 +159,35 @@ if tab == 0:
 elif tab == 1:
     st.subheader("Circuit de validation")
     c1, c2, c3 = st.columns(3)
-    c1.text_input("Élaboration",  key="gest_elab")
-    c2.text_input("Vérification", key="gest_verif")
-    c3.text_input("Approbation",  key="gest_appro")
+    c1.text_input("Élaboration",  key="gest_elab",  value=g("gest_elab"))
+    c2.text_input("Vérification", key="gest_verif", value=g("gest_verif"))
+    c3.text_input("Approbation",  key="gest_appro", value=g("gest_appro"))
 
     st.subheader("Suivi des révisions")
-    nb_rev = st.number_input("Nombre de révisions", min_value=1, max_value=10, value=1, key="nb_rev")
+    nb_rev = st.number_input("Nombre de révisions", min_value=1, max_value=10,
+                              value=int(g("nb_rev", 1)), key="nb_rev")
     for i in range(int(nb_rev)):
         r1, r2, r3 = st.columns([1, 2, 4])
-        r1.text_input(f"Indice #{i+1}",  value="A" if i == 0 else "", key=f"rev_ind_{i}")
-        r2.text_input(f"Date #{i+1}",                                  key=f"rev_date_{i}")
-        r3.text_input(f"Nature #{i+1}",
-                      value="Création du document" if i == 0 else "",  key=f"rev_nat_{i}")
+        r1.text_input(f"Indice #{i+1}",  key=f"rev_ind_{i}",  value=g(f"rev_ind_{i}", "A" if i==0 else ""))
+        r2.text_input(f"Date #{i+1}",    key=f"rev_date_{i}", value=g(f"rev_date_{i}"))
+        r3.text_input(f"Nature #{i+1}",  key=f"rev_nat_{i}",  value=g(f"rev_nat_{i}", "Création du document" if i==0 else ""))
 
     st.subheader("Diffusion")
     dc1, dc2 = st.columns(2)
     with dc1:
         st.markdown("**Intervenants externes**")
-        st.checkbox("Maître d'ouvrage",        value=True, key="diff_moa")
-        st.checkbox("Maître d'œuvre",           value=True, key="diff_moe")
-        st.checkbox("Entreprise mandataire",               key="diff_mand")
-        st.checkbox("Entreprise cotraitante",              key="diff_cotrait")
-        st.checkbox("Sous-traitant",                       key="diff_st")
-        st.checkbox("Coordinateur SPS",         value=True, key="diff_csps")
+        st.checkbox("Maître d'ouvrage",       key="diff_moa",      value=g("diff_moa",      True))
+        st.checkbox("Maître d'œuvre",          key="diff_moe",      value=g("diff_moe",      True))
+        st.checkbox("Entreprise mandataire",   key="diff_mand",     value=g("diff_mand",     False))
+        st.checkbox("Entreprise cotraitante",  key="diff_cotrait",  value=g("diff_cotrait",  False))
+        st.checkbox("Sous-traitant",           key="diff_st",       value=g("diff_st",       False))
+        st.checkbox("Coordinateur SPS",        key="diff_csps",     value=g("diff_csps",     True))
     with dc2:
         st.markdown("**Intervenants internes**")
-        st.checkbox("Service QSE",              value=True, key="diff_qse")
-        st.checkbox("Directeur travaux",        value=True, key="diff_dir")
-        st.checkbox("Conducteur de travaux",               key="diff_conducteur")
-        st.checkbox("Chef de chantier",         value=True, key="diff_chef")
+        st.checkbox("Service QSE",             key="diff_qse",        value=g("diff_qse",        True))
+        st.checkbox("Directeur travaux",       key="diff_dir",        value=g("diff_dir",        True))
+        st.checkbox("Conducteur de travaux",   key="diff_conducteur", value=g("diff_conducteur", False))
+        st.checkbox("Chef de chantier",        key="diff_chef",       value=g("diff_chef",       True))
 
     nav_buttons(tab)
 
@@ -144,11 +199,11 @@ elif tab == 2:
     def intervenant_form(titre, kp):
         st.markdown(f"**{titre}**")
         c1, c2 = st.columns(2)
-        c1.text_input("Nom / Raison sociale",    key=f"{kp}_nom")
-        c2.text_input("Adresse",                 key=f"{kp}_adr")
-        c1.text_input("Interlocuteur référent",  key=f"{kp}_int")
-        c1.text_input("Téléphone",               key=f"{kp}_tel")
-        c2.text_input("Email",                   key=f"{kp}_em")
+        c1.text_input("Nom / Raison sociale",   key=f"{kp}_nom", value=g(f"{kp}_nom"))
+        c2.text_input("Adresse",                key=f"{kp}_adr", value=g(f"{kp}_adr"))
+        c1.text_input("Interlocuteur référent", key=f"{kp}_int", value=g(f"{kp}_int"))
+        c1.text_input("Téléphone",              key=f"{kp}_tel", value=g(f"{kp}_tel"))
+        c2.text_input("Email",                  key=f"{kp}_em",  value=g(f"{kp}_em"))
 
     st.subheader("Intervenants du marché")
     intervenant_form("Maître d'ouvrage", "moa")
@@ -170,39 +225,45 @@ elif tab == 2:
 # ════════════════════════════════════════════════════════════════════════════
 elif tab == 3:
     st.subheader("Organisation de l'équipe")
-    nb_membres = st.number_input("Nombre de membres", min_value=1, max_value=20, value=2, key="nb_membres")
+    nb_membres = st.number_input("Nombre de membres", min_value=1, max_value=20,
+                                  value=int(g("nb_membres", 2)), key="nb_membres")
     for i in range(int(nb_membres)):
         c1, c2 = st.columns(2)
-        c1.text_input(f"Rôle #{i+1}",         key=f"role_{i}")
-        c2.text_input(f"Nom / Prénom #{i+1}",  key=f"membre_{i}")
+        c1.text_input(f"Rôle #{i+1}",        key=f"role_{i}",   value=g(f"role_{i}"))
+        c2.text_input(f"Nom / Prénom #{i+1}", key=f"membre_{i}", value=g(f"membre_{i}"))
 
     st.divider()
     st.subheader("Installation de chantier")
-    st.checkbox("Installations à la charge de l'entreprise", key="inst_charge")
+    st.checkbox("Installations à la charge de l'entreprise", key="inst_charge",   value=g("inst_charge", False))
     ic1, ic2, ic3, ic4 = st.columns(4)
-    ic1.checkbox("Bungalow",         key="inst_bungalow")
-    ic2.checkbox("Remorque VRS",     key="inst_remorque")
-    ic3.checkbox("Locaux existants", key="inst_locaux")
-    ic4.checkbox("Autre",            key="inst_autre")
+    ic1.checkbox("Bungalow",         key="inst_bungalow", value=g("inst_bungalow", False))
+    ic2.checkbox("Remorque VRS",     key="inst_remorque", value=g("inst_remorque", False))
+    ic3.checkbox("Locaux existants", key="inst_locaux",   value=g("inst_locaux",   False))
+    ic4.checkbox("Autre",            key="inst_autre",    value=g("inst_autre",    False))
 
     def local_form(lbl, key):
         st.markdown(f"*{lbl}*")
         c1, c2, c3 = st.columns([1, 1, 3])
-        c1.text_input("Nombre",        key=f"{key}_nb")
-        c2.text_input("Surface",       key=f"{key}_surf")
-        c3.text_input("Commentaires",  key=f"{key}_com")
+        c1.text_input("Nombre",       key=f"{key}_nb",   value=g(f"{key}_nb"))
+        c2.text_input("Surface",      key=f"{key}_surf", value=g(f"{key}_surf"))
+        c3.text_input("Commentaires", key=f"{key}_com",  value=g(f"{key}_com"))
 
     local_form("Vestiaires", "vest")
     local_form("Réfectoire",  "ref")
     local_form("Sanitaires",  "san")
 
+    _EAU_OPTS   = ["Raccordement réseau", "Bouteilles"]
+    _REPAS_OPTS = ["Sur le chantier", "À l'extérieur"]
+    _eau_saved   = g("eau",   "Raccordement réseau")
+    _repas_saved = g("repas", "Sur le chantier")
+
     e1, e2, e3 = st.columns(3)
-    e1.checkbox("Réseau électrique",       value=True, key="en_elec")
-    e2.checkbox("Groupe électrogène",                  key="en_group")
-    e3.checkbox("Chauffage auxiliaire gaz",             key="en_gaz")
-    st.radio("Eau potable", ["Raccordement réseau", "Bouteilles"], horizontal=True, key="eau")
-    st.radio("Repas", ["Sur le chantier", "À l'extérieur"], horizontal=True, key="repas")
-    st.text_input("Date de mise en service des installations", key="date_inst")
+    e1.checkbox("Réseau électrique",        key="en_elec",  value=g("en_elec",  True))
+    e2.checkbox("Groupe électrogène",       key="en_group", value=g("en_group", False))
+    e3.checkbox("Chauffage auxiliaire gaz", key="en_gaz",   value=g("en_gaz",   False))
+    st.radio("Eau potable", _EAU_OPTS,   index=_EAU_OPTS.index(_eau_saved)     if _eau_saved   in _EAU_OPTS   else 0, key="eau",   horizontal=True)
+    st.radio("Repas",       _REPAS_OPTS, index=_REPAS_OPTS.index(_repas_saved) if _repas_saved in _REPAS_OPTS else 0, key="repas", horizontal=True)
+    st.text_input("Date de mise en service des installations", key="date_inst", value=g("date_inst"))
 
     nav_buttons(tab)
 
@@ -213,43 +274,42 @@ elif tab == 3:
 elif tab == 4:
     st.subheader("Organisation des secours")
     c1, c2 = st.columns(2)
-    c1.text_input("Téléphone urgence chantier",  key="sec_tel")
-    c2.text_input("Nom du chantier",             key="sec_nom")
-    c1.text_input("Numéro de chantier",          key="sec_num")
-    c2.text_input("Adresse / Localisation",      key="sec_adresse")
-    c1.text_input("Nom(s) du/des SST",           key="sec_sst")
-    c2.text_input("Défibrillateur (emplacement)",key="sec_defib")
+    c1.text_input("Téléphone urgence chantier",   key="sec_tel",     value=g("sec_tel"))
+    c2.text_input("Nom du chantier",              key="sec_nom",     value=g("sec_nom"))
+    c1.text_input("Numéro de chantier",           key="sec_num",     value=g("sec_num"))
+    c2.text_input("Adresse / Localisation",       key="sec_adresse", value=g("sec_adresse"))
+    c1.text_input("Nom(s) du/des SST",            key="sec_sst",     value=g("sec_sst"))
+    c2.text_input("Défibrillateur (emplacement)", key="sec_defib",   value=g("sec_defib"))
 
     st.divider()
     st.subheader("EPI obligatoires")
-    st.text_area("Un EPI par ligne",
-        value="Casque de chantier\nGilet haute visibilité\nChaussures ou bottes de sécurité",
-        height=120, key="epi_text")
+    st.text_area("Un EPI par ligne", height=120, key="epi_text",
+        value=g("epi_text", "Casque de chantier\nGilet haute visibilité\nChaussures ou bottes de sécurité"))
 
     st.divider()
     st.subheader("Consignes de sécurité")
-    st.text_area("Une consigne par ligne",
-        value="Port des EPI obligatoire\nArrêt des moteurs si possible\nInterdiction de fumer",
-        height=100, key="consignes_text")
+    st.text_area("Une consigne par ligne", height=100, key="consignes_text",
+        value=g("consignes_text", "Port des EPI obligatoire\nArrêt des moteurs si possible\nInterdiction de fumer"))
 
     st.divider()
     st.subheader("Propreté et cheminement")
-    st.text_area("Une règle par ligne",
-        value=("Nettoyer régulièrement les postes de travail\n"
-               "Utiliser les zones de stockage prévues\n"
-               "Maintenir le cantonnement propre en permanence\n"
-               "Effectuer un nettoyage quotidien du chantier\n"
-               "Mettre à disposition des poubelles pour le tri des déchets\n"
-               "Désencombrer les voies de circulation"),
-        height=130, key="proprete_text")
+    st.text_area("Une règle par ligne", height=130, key="proprete_text",
+        value=g("proprete_text",
+                "Nettoyer régulièrement les postes de travail\n"
+                "Utiliser les zones de stockage prévues\n"
+                "Maintenir le cantonnement propre en permanence\n"
+                "Effectuer un nettoyage quotidien du chantier\n"
+                "Mettre à disposition des poubelles pour le tri des déchets\n"
+                "Désencombrer les voies de circulation"))
 
     st.divider()
     st.subheader("Émargement — membres pré-remplis (optionnel)")
-    nb_sign = st.number_input("Nombre de signataires", 0, 20, 0, key="nb_sign")
+    nb_sign = st.number_input("Nombre de signataires", 0, 20,
+                               value=int(g("nb_sign", 0)), key="nb_sign")
     for i in range(int(nb_sign)):
         s1, s2 = st.columns(2)
-        s1.text_input(f"Nom #{i+1}",        key=f"sign_nom_{i}")
-        s2.text_input(f"Entreprise #{i+1}", key=f"sign_ent_{i}")
+        s1.text_input(f"Nom #{i+1}",        key=f"sign_nom_{i}", value=g(f"sign_nom_{i}"))
+        s2.text_input(f"Entreprise #{i+1}", key=f"sign_ent_{i}", value=g(f"sign_ent_{i}"))
 
     nav_buttons(tab)
 
@@ -259,18 +319,20 @@ elif tab == 4:
 # ════════════════════════════════════════════════════════════════════════════
 elif tab == 5:
     st.subheader("Phases de travail et risques")
-    st.caption("Ajoutez autant de lignes que nécessaire — le tableau s'adapte automatiquement.")
+    st.caption("Ajoutez autant de phases que nécessaire.")
 
-    DANGER_OPTIONS = {
-        "1 – Faible (blessure légère, sans arrêt)": 1,
-        "10 – Moyen (arrêt de travail)": 10,
-        "100 – Grave (incapacité permanente)": 100,
-        "1000 – Très grave (danger de mort)": 1000,
-    }
-    EXPO_OPTIONS = {
-        "1 – Très improbable": 1, "2 – Improbable": 2,
-        "3 – Probable": 3, "4 – Très probable": 4,
-    }
+    DANGER_OPTS = [
+        "1 – Faible (blessure légère, sans arrêt)",
+        "10 – Moyen (arrêt de travail)",
+        "100 – Grave (incapacité permanente)",
+        "1000 – Très grave (danger de mort)",
+    ]
+    EXPO_OPTS = [
+        "1 – Très improbable", "2 – Improbable",
+        "3 – Probable",        "4 – Très probable",
+    ]
+    DANGER_MAP = {o: int(o.split(" ")[0].replace("–","").strip()) for o in DANGER_OPTS}
+    EXPO_MAP   = {o: int(o.split(" ")[0].replace("–","").strip()) for o in EXPO_OPTS}
 
     col_add, col_rem, _ = st.columns([1, 1, 4])
     if col_add.button("＋ Ajouter une phase", key="add_phase"):
@@ -281,15 +343,20 @@ elif tab == 5:
     for i in range(st.session_state.nb_risques):
         with st.expander(f"Phase {i+1}", expanded=(i < 3)):
             r1, r2 = st.columns(2)
-            r1.text_input("Phase de travail",   key=f"r_phase_{i}")
-            r2.text_input("Facteur de risque",  key=f"r_facteur_{i}")
+            r1.text_input("Phase de travail",   key=f"r_phase_{i}",   value=g(f"r_phase_{i}"))
+            r2.text_input("Facteur de risque",  key=f"r_facteur_{i}", value=g(f"r_facteur_{i}"))
             r3, r4 = st.columns(2)
-            r3.text_input("Situation à risque", key=f"r_sit_{i}")
-            r4.text_input("Risques identifiés", key=f"r_risque_{i}")
+            r3.text_input("Situation à risque", key=f"r_sit_{i}",     value=g(f"r_sit_{i}"))
+            r4.text_input("Risques identifiés", key=f"r_risque_{i}",  value=g(f"r_risque_{i}"))
             r5, r6 = st.columns(2)
-            r5.selectbox("Dangerosité", list(DANGER_OPTIONS.keys()), key=f"r_dang_{i}")
-            r6.selectbox("Exposition",  list(EXPO_OPTIONS.keys()),   key=f"r_expo_{i}")
-            st.text_area("Mesures de prévention", key=f"r_mes_{i}", height=60)
+            _dang_saved = g(f"r_dang_{i}", DANGER_OPTS[0])
+            _expo_saved = g(f"r_expo_{i}", EXPO_OPTS[0])
+            r5.selectbox("Dangerosité", DANGER_OPTS, key=f"r_dang_{i}",
+                         index=DANGER_OPTS.index(_dang_saved) if _dang_saved in DANGER_OPTS else 0)
+            r6.selectbox("Exposition",  EXPO_OPTS,   key=f"r_expo_{i}",
+                         index=EXPO_OPTS.index(_expo_saved) if _expo_saved in EXPO_OPTS else 0)
+            st.text_area("Mesures de prévention", key=f"r_mes_{i}", height=60,
+                         value=g(f"r_mes_{i}"))
 
     nav_buttons(tab)
 
@@ -301,24 +368,22 @@ elif tab == 6:
     st.subheader("Annexes")
     st.caption("Ajoutez des documents PDF à joindre à la suite du PPSPS (plans, PIC, fiches prévention…).")
 
-    # Ajouter une annexe
     with st.form("form_annexe", clear_on_submit=True):
         fa1, fa2 = st.columns([2, 3])
-        titre_annexe = fa1.text_input("Titre de l'annexe",
-                                      placeholder="ex : Plan d'Installation de Chantier")
-        fichier_annexe = fa2.file_uploader("Fichier PDF", type=["pdf"], label_visibility="collapsed")
-        submitted = st.form_submit_button("＋ Ajouter cette annexe", type="primary")
-        if submitted:
+        titre_annexe   = fa1.text_input("Titre de l'annexe",
+                                         placeholder="ex : Plan d'Installation de Chantier")
+        fichier_annexe = fa2.file_uploader("Fichier PDF", type=["pdf"],
+                                            label_visibility="collapsed")
+        if st.form_submit_button("＋ Ajouter cette annexe", type="primary"):
             if fichier_annexe is None:
                 st.warning("Sélectionnez un fichier PDF.")
             else:
                 st.session_state.annexes.append({
                     "titre": titre_annexe or fichier_annexe.name,
-                    "data": fichier_annexe.read(),
+                    "data":  fichier_annexe.read(),
                 })
                 st.success(f"Annexe « {titre_annexe or fichier_annexe.name} » ajoutée.")
 
-    # Liste des annexes
     if st.session_state.annexes:
         st.markdown(f"**{len(st.session_state.annexes)} annexe(s) enregistrée(s) :**")
         for idx, ann in enumerate(st.session_state.annexes):
@@ -341,142 +406,153 @@ elif tab == 7:
     st.subheader("Générer le PPSPS")
     st.info("Vérifiez vos informations dans les onglets précédents, puis cliquez sur le bouton.")
 
-    # Résumé rapide
     ss = st.session_state
     with st.expander("Récapitulatif rapide", expanded=False):
-        st.markdown(f"**Entreprise :** {ss.get('ent_nom','—')}")
-        st.markdown(f"**Chantier :** {ss.get('proj_intitule','—')} — {ss.get('proj_client','—')}")
+        st.markdown(f"**Entreprise :** {g('ent_nom') or '—'}")
+        st.markdown(f"**Chantier :** {g('proj_intitule') or '—'} — {g('proj_client') or '—'}")
         st.markdown(f"**Phases de risque :** {ss.nb_risques}")
         st.markdown(f"**Annexes :** {len(ss.annexes)}")
 
     if st.button("📄 Générer le PDF", type="primary", use_container_width=True):
-        ss = st.session_state
 
-        # Reconstruction des listes
-        nb_rev = int(ss.get("nb_rev", 1))
-        suivis = [{"indice": ss.get(f"rev_ind_{i}",""),
-                   "date":   ss.get(f"rev_date_{i}",""),
-                   "nature": ss.get(f"rev_nat_{i}","")}
+        nb_rev     = int(g("nb_rev", 1))
+        nb_membres = int(g("nb_membres", 2))
+        nb_sign    = int(g("nb_sign", 0))
+
+        suivis = [{"indice": g(f"rev_ind_{i}", "A" if i==0 else ""),
+                   "date":   g(f"rev_date_{i}"),
+                   "nature": g(f"rev_nat_{i}", "Création du document" if i==0 else "")}
                   for i in range(nb_rev)]
 
-        nb_membres = int(ss.get("nb_membres", 2))
-        membres = [{"role": ss.get(f"role_{i}",""), "nom": ss.get(f"membre_{i}","")}
+        membres = [{"role": g(f"role_{i}"), "nom": g(f"membre_{i}")}
                    for i in range(nb_membres)]
 
-        nb_sign = int(ss.get("nb_sign", 0))
-        signataires = [{"nom": ss.get(f"sign_nom_{i}",""), "entreprise": ss.get(f"sign_ent_{i}","")}
+        signataires = [{"nom": g(f"sign_nom_{i}"), "entreprise": g(f"sign_ent_{i}")}
                        for i in range(nb_sign)]
 
-        DANGER_MAP = {"1 – Faible (blessure légère, sans arrêt)": 1,
-                      "10 – Moyen (arrêt de travail)": 10,
-                      "100 – Grave (incapacité permanente)": 100,
-                      "1000 – Très grave (danger de mort)": 1000}
-        EXPO_MAP   = {"1 – Très improbable": 1, "2 – Improbable": 2,
-                      "3 – Probable": 3, "4 – Très probable": 4}
+        DANGER_MAP = {
+            "1 – Faible (blessure légère, sans arrêt)": 1,
+            "10 – Moyen (arrêt de travail)": 10,
+            "100 – Grave (incapacité permanente)": 100,
+            "1000 – Très grave (danger de mort)": 1000,
+        }
+        EXPO_MAP = {
+            "1 – Très improbable": 1, "2 – Improbable": 2,
+            "3 – Probable": 3,        "4 – Très probable": 4,
+        }
+
+        DANGER_DEF = "1 – Faible (blessure légère, sans arrêt)"
+        EXPO_DEF   = "1 – Très improbable"
 
         risques = []
         for i in range(ss.nb_risques):
-            phase = ss.get(f"r_phase_{i}", "")
-            sit   = ss.get(f"r_sit_{i}", "")
+            phase = g(f"r_phase_{i}")
+            sit   = g(f"r_sit_{i}")
             if phase or sit:
                 risques.append({
                     "phase":         phase,
-                    "facteur_risque":ss.get(f"r_facteur_{i}",""),
+                    "facteur_risque":g(f"r_facteur_{i}"),
                     "situation":     sit,
-                    "risques":       ss.get(f"r_risque_{i}",""),
-                    "dangerosite":   DANGER_MAP.get(ss.get(f"r_dang_{i}",""), 1),
-                    "exposition":    EXPO_MAP.get(ss.get(f"r_expo_{i}",""), 1),
-                    "mesures":       ss.get(f"r_mes_{i}",""),
+                    "risques":       g(f"r_risque_{i}"),
+                    "dangerosite":   DANGER_MAP.get(g(f"r_dang_{i}", DANGER_DEF), 1),
+                    "exposition":    EXPO_MAP.get(g(f"r_expo_{i}", EXPO_DEF), 1),
+                    "mesures":       g(f"r_mes_{i}"),
                 })
 
         inst_types = []
-        if ss.get("inst_bungalow"): inst_types.append("bungalow")
-        if ss.get("inst_remorque"): inst_types.append("remorque")
-        if ss.get("inst_locaux"):   inst_types.append("locaux_existants")
-        if ss.get("inst_autre"):    inst_types.append("autre")
+        if g("inst_bungalow", False): inst_types.append("bungalow")
+        if g("inst_remorque", False): inst_types.append("remorque")
+        if g("inst_locaux",   False): inst_types.append("locaux_existants")
+        if g("inst_autre",    False): inst_types.append("autre")
 
         energies = []
-        if ss.get("en_elec"):  energies.append("reseau_elec")
-        if ss.get("en_group"): energies.append("groupe")
-        if ss.get("en_gaz"):   energies.append("chauffage_gaz")
+        if g("en_elec",  True):  energies.append("reseau_elec")
+        if g("en_group", False): energies.append("groupe")
+        if g("en_gaz",   False): energies.append("chauffage_gaz")
 
         def get_interv(kp):
-            return {"nom":          ss.get(f"{kp}_nom",""),
-                    "adresse":      ss.get(f"{kp}_adr",""),
-                    "interlocuteur":ss.get(f"{kp}_int",""),
-                    "telephone":    ss.get(f"{kp}_tel",""),
-                    "email":        ss.get(f"{kp}_em","")}
+            return {"nom":           g(f"{kp}_nom"),
+                    "adresse":       g(f"{kp}_adr"),
+                    "interlocuteur": g(f"{kp}_int"),
+                    "telephone":     g(f"{kp}_tel"),
+                    "email":         g(f"{kp}_em")}
 
         data = {
             "entreprise": {
-                "nom":                  ss.get("ent_nom",""),
-                "adresse":              ss.get("ent_adresse",""),
-                "telephone":            ss.get("ent_tel",""),
-                "email":                ss.get("ent_email",""),
-                "responsable_technique":ss.get("ent_resp",""),
-                "tel_responsable":      ss.get("ent_tel_resp",""),
-                "email_responsable":    ss.get("ent_email_resp",""),
+                "nom":                   g("ent_nom"),
+                "adresse":               g("ent_adresse"),
+                "telephone":             g("ent_tel"),
+                "email":                 g("ent_email"),
+                "responsable_technique": g("ent_resp"),
+                "tel_responsable":       g("ent_tel_resp"),
+                "email_responsable":     g("ent_email_resp"),
             },
             "projet": {
-                "intitule":       ss.get("proj_intitule",""),
-                "client":         ss.get("proj_client",""),
-                "situation":      ss.get("proj_situation",""),
-                "type_ouvrage":   ss.get("proj_type",""),
-                "description":    ss.get("proj_description",""),
-                "date_debut":     ss.get("proj_debut",""),
-                "duree":          ss.get("proj_duree",""),
-                "effectif_moyen": ss.get("proj_effectif",""),
-                "avis_ouverture": ss.get("proj_avis", False),
-                "date_creation":  ss.get("proj_date_creation",""),
+                "intitule":       g("proj_intitule"),
+                "client":         g("proj_client"),
+                "situation":      g("proj_situation"),
+                "type_ouvrage":   g("proj_type"),
+                "description":    g("proj_description"),
+                "date_debut":     g("proj_debut"),
+                "duree":          g("proj_duree"),
+                "effectif_moyen": g("proj_effectif"),
+                "avis_ouverture": g("proj_avis", False),
+                "date_creation":  g("proj_date_creation"),
             },
-            "acces_site": ss.get("acces_site",""),
+            "acces_site": g("acces_site"),
             "gestion": {
-                "elaboration": ss.get("gest_elab",""),
-                "verification":ss.get("gest_verif",""),
-                "approbation": ss.get("gest_appro",""),
+                "elaboration":  g("gest_elab"),
+                "verification": g("gest_verif"),
+                "approbation":  g("gest_appro"),
                 "suivis": suivis,
                 "diffusion": {
-                    "externes": {"moa":    ss.get("diff_moa", True),
-                                 "moe":    ss.get("diff_moe", True),
-                                 "mandataire": ss.get("diff_mand", False),
-                                 "cotraitant": ss.get("diff_cotrait", False),
-                                 "sous_traitant": ss.get("diff_st", False),
-                                 "csps":   ss.get("diff_csps", True)},
-                    "internes": {"qse":    ss.get("diff_qse", True),
-                                 "dir_travaux": ss.get("diff_dir", True),
-                                 "conducteur":  ss.get("diff_conducteur", False),
-                                 "chef_chantier": ss.get("diff_chef", True)},
+                    "externes": {
+                        "moa":         g("diff_moa",      True),
+                        "moe":         g("diff_moe",      True),
+                        "mandataire":  g("diff_mand",     False),
+                        "cotraitant":  g("diff_cotrait",  False),
+                        "sous_traitant": g("diff_st",     False),
+                        "csps":        g("diff_csps",     True),
+                    },
+                    "internes": {
+                        "qse":          g("diff_qse",        True),
+                        "dir_travaux":  g("diff_dir",        True),
+                        "conducteur":   g("diff_conducteur", False),
+                        "chef_chantier":g("diff_chef",       True),
+                    },
                 },
             },
             "intervenants": {
-                "moa": get_interv("moa"), "moe": get_interv("moe"),
-                "csps": get_interv("csps"), "inspection_travail": get_interv("it"),
+                "moa":              get_interv("moa"),
+                "moe":              get_interv("moe"),
+                "csps":             get_interv("csps"),
+                "inspection_travail": get_interv("it"),
                 "medecine_travail": get_interv("med"),
             },
             "organisation": {"membres": membres},
             "installation": {
-                "a_charge_entreprise": ss.get("inst_charge", False),
+                "a_charge_entreprise": g("inst_charge", False),
                 "types": inst_types,
-                "vestiaire":  {"nombre": ss.get("vest_nb",""), "surface": ss.get("vest_surf",""), "commentaires": ss.get("vest_com","")},
-                "refectoire": {"nombre": ss.get("ref_nb",""),  "surface": ss.get("ref_surf",""),  "commentaires": ss.get("ref_com","")},
-                "sanitaire":  {"nombre": ss.get("san_nb",""),  "surface": ss.get("san_surf",""),  "commentaires": ss.get("san_com","")},
-                "repas_sur_chantier": ss.get("repas","Sur le chantier") == "Sur le chantier",
+                "vestiaire":  {"nombre": g("vest_nb"), "surface": g("vest_surf"), "commentaires": g("vest_com")},
+                "refectoire": {"nombre": g("ref_nb"),  "surface": g("ref_surf"),  "commentaires": g("ref_com")},
+                "sanitaire":  {"nombre": g("san_nb"),  "surface": g("san_surf"),  "commentaires": g("san_com")},
+                "repas_sur_chantier": g("repas", "Sur le chantier") == "Sur le chantier",
                 "energies": energies,
-                "eau_potable": "reseau" if ss.get("eau","Raccordement réseau") == "Raccordement réseau" else "bouteilles",
-                "date_mise_en_service": ss.get("date_inst",""),
+                "eau_potable": "reseau" if g("eau", "Raccordement réseau") == "Raccordement réseau" else "bouteilles",
+                "date_mise_en_service": g("date_inst"),
             },
             "secours": {
-                "telephone_urgence": ss.get("sec_tel",""),
-                "chantier_nom":      ss.get("sec_nom",""),
-                "chantier_numero":   ss.get("sec_num",""),
-                "chantier_adresse":  ss.get("sec_adresse",""),
-                "sst_noms":          ss.get("sec_sst",""),
-                "defibrillateur":    ss.get("sec_defib",""),
+                "telephone_urgence": g("sec_tel"),
+                "chantier_nom":      g("sec_nom"),
+                "chantier_numero":   g("sec_num"),
+                "chantier_adresse":  g("sec_adresse"),
+                "sst_noms":          g("sec_sst"),
+                "defibrillateur":    g("sec_defib"),
             },
             "prevention": {
-                "epi":       [e.strip() for e in ss.get("epi_text","").split("\n") if e.strip()],
-                "consignes": [c.strip() for c in ss.get("consignes_text","").split("\n") if c.strip()],
-                "proprete":  [p.strip() for p in ss.get("proprete_text","").split("\n") if p.strip()],
+                "epi":       [e.strip() for e in g("epi_text").split("\n")       if e.strip()],
+                "consignes": [c.strip() for c in g("consignes_text").split("\n") if c.strip()],
+                "proprete":  [p.strip() for p in g("proprete_text").split("\n")  if p.strip()],
             },
             "risques": risques,
             "signataires": signataires,
@@ -484,30 +560,27 @@ elif tab == 7:
 
         with st.spinner("Génération en cours..."):
             try:
-                # 1. Générer le PPSPS principal
                 main_pdf = generer_ppsps(data)
 
-                # 2. Fusionner les annexes
                 if ss.annexes:
                     writer = PdfWriter()
                     for page in PdfReader(main_pdf).pages:
                         writer.add_page(page)
                     for ann in ss.annexes:
                         try:
-                            ann_reader = PdfReader(io.BytesIO(ann["data"]))
-                            for page in ann_reader.pages:
+                            for page in PdfReader(io.BytesIO(ann["data"])).pages:
                                 writer.add_page(page)
                         except Exception as ex:
-                            st.warning(f"Annexe « {ann['titre']} » ignorée (PDF invalide) : {ex}")
+                            st.warning(f"Annexe « {ann['titre']} » ignorée : {ex}")
                     final_buf = io.BytesIO()
                     writer.write(final_buf)
                     final_buf.seek(0)
                 else:
                     final_buf = main_pdf
 
-                intitule = ss.get("proj_intitule","document")
+                intitule    = g("proj_intitule", "document")
                 nom_fichier = f"PPSPS_{intitule.replace(' ','_')}.pdf"
-                st.success(f"✅ PDF généré avec succès !  ({len(ss.annexes)} annexe(s) incluse(s))")
+                st.success(f"✅ PDF généré avec succès ! ({len(ss.annexes)} annexe(s) incluse(s))")
                 st.download_button(
                     label="⬇️ Télécharger le PPSPS",
                     data=final_buf,
