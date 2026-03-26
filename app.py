@@ -3,6 +3,7 @@ app.py — Interface Streamlit pour la génération du PPSPS.
 Navigation Précédent / Suivant avec persistance totale des données entre sections.
 """
 
+import csv
 import io
 import streamlit as st
 from pypdf import PdfReader, PdfWriter
@@ -46,7 +47,10 @@ _STATIC_KEYS = [
 _MAX_DYN = 25  # maximum pour les listes dynamiques
 
 def _snapshot():
-    """Copie toutes les valeurs de widgets actuellement en session vers les clés _p_."""
+    """Copie toutes les valeurs de widgets actuellement en session vers les clés _p_.
+    Sautée juste après un import CSV pour ne pas écraser les valeurs importées."""
+    if st.session_state.pop("_skip_snapshot", False):
+        return
     for k in _STATIC_KEYS:
         if k in st.session_state:
             st.session_state[f"_p_{k}"] = st.session_state[k]
@@ -63,10 +67,96 @@ def _snapshot():
 
 _snapshot()   # ← exécuté à chaque render, AVANT le rendu des widgets
 
+# ── Données entreprise fixes (non modifiables) ────────────────────────────
+ENTREPRISE_FIXE = {
+    "ent_nom":        "Agence Deldossi Assainissement",
+    "ent_adresse":    "490 Route de Toulouse, 81370 Saint-Sulpice-la-Pointe",
+    "ent_tel":        "05 63 40 21 98",
+    "ent_email":      "contact@deldossi-assainissement.com",
+    "ent_resp":       "Kevin HAVEL",
+    "ent_tel_resp":   "06 27 25 59 82",
+    "ent_email_resp": "k.havel@deldossi-assainissement.com",
+}
+# Toujours injecter dans les clés persistées (pour export CSV + génération)
+for _k, _v in ENTREPRISE_FIXE.items():
+    st.session_state[f"_p_{_k}"] = _v
+
 # ── Raccourcis lecture / écriture persistance ─────────────────────────────
 def g(key, default=""):
     """Lire la valeur persistée d'un champ (ou default si pas encore saisie)."""
     return st.session_state.get(f"_p_{key}", default)
+
+# ════════════════════════════════════════════════════════════════════════════
+# EXPORT / IMPORT CSV
+# ════════════════════════════════════════════════════════════════════════════
+
+# Clés dont la valeur est un booléen (pour conversion correcte à l'import)
+_BOOL_KEYS = {
+    "proj_avis",
+    "diff_moa","diff_moe","diff_mand","diff_cotrait","diff_st","diff_csps",
+    "diff_qse","diff_dir","diff_conducteur","diff_chef",
+    "inst_charge","inst_bungalow","inst_remorque","inst_locaux","inst_autre",
+    "en_elec","en_group","en_gaz",
+}
+# Clés dont la valeur est un entier
+_INT_KEYS = {"nb_rev", "nb_membres", "nb_sign"}
+
+_DYN_PREFIXES = [
+    "rev_ind_","rev_date_","rev_nat_",
+    "role_","membre_",
+    "sign_nom_","sign_ent_",
+    "r_phase_","r_facteur_","r_sit_","r_risque_","r_dang_","r_expo_","r_mes_",
+]
+
+def _all_data_rows():
+    """Retourne toutes les paires (clé, valeur) à exporter."""
+    rows = []
+    # Clé spéciale nb_risques (directement dans session_state)
+    rows.append(("nb_risques", str(st.session_state.get("nb_risques", 3))))
+    # Clés statiques
+    for k in _STATIC_KEYS:
+        rows.append((k, str(g(k, ""))))
+    # Clés dynamiques (on exporte toutes les valeurs, même vides, pour la fidélité)
+    for i in range(_MAX_DYN):
+        for pfx in _DYN_PREFIXES:
+            k = f"{pfx}{i}"
+            rows.append((k, str(g(k, ""))))
+    return rows
+
+def export_csv() -> bytes:
+    """Sérialise toutes les données du formulaire en CSV (encodage UTF-8 BOM pour Excel)."""
+    buf = io.StringIO()
+    writer = csv.writer(buf, quoting=csv.QUOTE_ALL)
+    writer.writerow(["cle", "valeur"])
+    writer.writerows(_all_data_rows())
+    return buf.getvalue().encode("utf-8-sig")
+
+def import_csv(file_bytes: bytes):
+    """Charge un CSV exporté et restaure toutes les valeurs dans le session_state."""
+    content = file_bytes.decode("utf-8-sig")
+    reader  = csv.DictReader(io.StringIO(content))
+    loaded  = 0
+    for row in reader:
+        k = row.get("cle","").strip()
+        v = row.get("valeur","")
+        if not k:
+            continue
+        if k == "nb_risques":
+            try:
+                st.session_state.nb_risques = max(1, int(v))
+            except ValueError:
+                pass
+        elif k in _BOOL_KEYS:
+            st.session_state[f"_p_{k}"] = v.strip().lower() in ("true", "1", "oui", "yes")
+        elif k in _INT_KEYS:
+            try:
+                st.session_state[f"_p_{k}"] = max(0, int(v))
+            except ValueError:
+                pass
+        else:
+            st.session_state[f"_p_{k}"] = v
+        loaded += 1
+    return loaded
 
 # ── Constantes de navigation ──────────────────────────────────────────────
 TAB_NAMES = [
@@ -113,6 +203,40 @@ for i, (col, name) in enumerate(zip(cols, TAB_NAMES)):
                on_click=go_to, args=(i,))
 
 st.divider()
+
+# ── Bandeau Export / Import ────────────────────────────────────────────────
+with st.expander("💾  Sauvegarder / Charger mes données", expanded=False):
+    col_exp, col_imp = st.columns(2)
+
+    with col_exp:
+        st.markdown("**📤 Exporter**")
+        st.caption("Téléchargez toutes vos données au format CSV. Vous pourrez les recharger plus tard pour pré-remplir le formulaire.")
+        csv_bytes = export_csv()
+        st.download_button(
+            label="⬇️ Télécharger le CSV",
+            data=csv_bytes,
+            file_name="ppsps_donnees.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+
+    with col_imp:
+        st.markdown("**📥 Importer**")
+        st.caption("Chargez un CSV précédemment exporté pour pré-remplir automatiquement tous les champs.")
+        uploaded_csv = st.file_uploader("Fichier CSV", type=["csv"],
+                                         label_visibility="collapsed",
+                                         key="csv_uploader")
+        if uploaded_csv is not None:
+            if st.button("✅ Charger les données", use_container_width=True, type="primary",
+                         key="btn_import"):
+                n = import_csv(uploaded_csv.read())
+                # Signaler au prochain render de sauter le snapshot pour ne pas
+                # écraser les valeurs importées avec les anciennes valeurs des widgets
+                st.session_state["_skip_snapshot"] = True
+                st.success(f"{n} champs importés — les sections sont maintenant pré-remplies.")
+                st.rerun()
+
+st.divider()
 tab = st.session_state.tab
 
 
@@ -121,14 +245,15 @@ tab = st.session_state.tab
 # ════════════════════════════════════════════════════════════════════════════
 if tab == 0:
     st.subheader("Votre entreprise")
+    st.caption("Ces informations sont pré-remplies et non modifiables.")
     c1, c2 = st.columns(2)
-    c1.text_input("Nom de l'entreprise",                      key="ent_nom",       value=g("ent_nom"))
-    c2.text_input("Adresse",                                   key="ent_adresse",   value=g("ent_adresse"))
-    c1.text_input("Téléphone",                                 key="ent_tel",       value=g("ent_tel"))
-    c2.text_input("Email",                                     key="ent_email",     value=g("ent_email"))
-    c1.text_input("Responsable technique / Chef de chantier",  key="ent_resp",      value=g("ent_resp"))
-    c2.text_input("Téléphone responsable",                     key="ent_tel_resp",  value=g("ent_tel_resp"))
-    c1.text_input("Email responsable",                         key="ent_email_resp",value=g("ent_email_resp"))
+    c1.text_input("Nom de l'entreprise",                      value=ENTREPRISE_FIXE["ent_nom"],        disabled=True)
+    c2.text_input("Adresse",                                   value=ENTREPRISE_FIXE["ent_adresse"],    disabled=True)
+    c1.text_input("Téléphone",                                 value=ENTREPRISE_FIXE["ent_tel"],        disabled=True)
+    c2.text_input("Email",                                     value=ENTREPRISE_FIXE["ent_email"],      disabled=True)
+    c1.text_input("Responsable technique / Chef de chantier",  value=ENTREPRISE_FIXE["ent_resp"],       disabled=True)
+    c2.text_input("Téléphone responsable",                     value=ENTREPRISE_FIXE["ent_tel_resp"],   disabled=True)
+    c1.text_input("Email responsable",                         value=ENTREPRISE_FIXE["ent_email_resp"], disabled=True)
 
     st.divider()
     st.subheader("Informations projet")
