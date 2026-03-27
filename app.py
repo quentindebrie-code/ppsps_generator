@@ -147,14 +147,19 @@ def import_csv(file_bytes: bytes):
             except ValueError:
                 pass
         elif k in _BOOL_KEYS:
-            st.session_state[f"_p_{k}"] = v.strip().lower() in ("true", "1", "oui", "yes")
+            val = v.strip().lower() in ("true", "1", "oui", "yes")
+            st.session_state[f"_p_{k}"] = val
+            st.session_state[k] = val          # met à jour la clé widget directe
         elif k in _INT_KEYS:
             try:
-                st.session_state[f"_p_{k}"] = max(0, int(v))
+                val = max(0, int(v))
+                st.session_state[f"_p_{k}"] = val
+                st.session_state[k] = val      # met à jour la clé widget directe
             except ValueError:
                 pass
         else:
             st.session_state[f"_p_{k}"] = v
+            st.session_state[k] = v            # met à jour la clé widget directe
         loaded += 1
     return loaded
 
