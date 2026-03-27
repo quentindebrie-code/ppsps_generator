@@ -14,6 +14,8 @@ from reportlab.lib.units import cm, mm
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT, TA_JUSTIFY
 from reportlab.platypus.flowables import Flowable
+from reportlab.graphics.shapes import Drawing, Rect
+from reportlab.pdfbase.pdfmetrics import stringWidth
 
 # ── Palette ───────────────────────────────────────────────────────────────────
 NAVY      = colors.HexColor("#0D1B3E")
@@ -220,7 +222,8 @@ def _info_table(rows, col_w=None):
     """Tableau label/valeur à 2 colonnes."""
     if col_w is None:
         col_w = [5.5*cm, CONTENT_W - 5.5*cm]
-    data = [[P(label, "TLabel"), P(val or "—", "TVal")] for label, val in rows]
+    data = [[P(label, "TLabel"), P(val or "—", "TVal") if isinstance(val, str) else val]
+            for label, val in rows]
     t = Table(data, colWidths=col_w, hAlign="LEFT")
     t.setStyle(TableStyle([
         ("VALIGN",      (0,0), (-1,-1), "TOP"),
@@ -233,8 +236,39 @@ def _info_table(rows, col_w=None):
     ]))
     return t
 
-def _checkbox(checked):
-    return "☑" if checked else "☐"
+def _chk(checked, size=7):
+    """Carré vectoriel : noir plein si coché, blanc avec contour si non coché."""
+    d = Drawing(size + 2, size + 2)
+    d.add(Rect(1, 1, size, size,
+               fillColor=BLACK if checked else WHITE,
+               strokeColor=BLACK, strokeWidth=0.8))
+    return d
+
+def _chk_row(prefix, *options):
+    """
+    Retourne un Table flowable :  prefix  [■/□] label  [■/□] label …
+    options : list of (checked: bool, label: str)
+    """
+    cells  = []
+    widths = []
+    FONT, FS = "Helvetica", 8.5
+    if prefix:
+        cells.append(P(prefix, "Body"))
+        widths.append(stringWidth(prefix, FONT, FS) + 4)
+    for checked, label in options:
+        cells.append(_chk(checked))
+        cells.append(P(f" {label}", "Body"))
+        widths.append(0.35 * cm)
+        widths.append(stringWidth(f" {label}", FONT, FS) + 8)
+    t = Table([cells], colWidths=widths, hAlign="LEFT")
+    t.setStyle(TableStyle([
+        ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING",    (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+    ]))
+    return t
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -385,18 +419,18 @@ def _section_gestion(story, data):
 
     diff_rows = [
         [P("INTERVENANTS EXTERNES","TH"), P("Diffusé","TH"), P("INTERVENANTS INTERNES","TH"), P("Diffusé","TH")],
-        [P("Maître d'ouvrage","TD"),   P(_checkbox(ext.get("moa",True)),"TD_C"),
-         P("Service QSE","TD"),         P(_checkbox(int_.get("qse",True)),"TD_C")],
-        [P("Maître d'œuvre","TD"),      P(_checkbox(ext.get("moe",True)),"TD_C"),
-         P("Directeur travaux","TD"),   P(_checkbox(int_.get("dir_travaux",True)),"TD_C")],
-        [P("Entreprise mandataire","TD"),P(_checkbox(ext.get("mandataire",False)),"TD_C"),
-         P("Conducteur de travaux","TD"),P(_checkbox(int_.get("conducteur",False)),"TD_C")],
-        [P("Entreprise cotraitante","TD"),P(_checkbox(ext.get("cotraitant",False)),"TD_C"),
-         P("Chef de chantier","TD"),    P(_checkbox(int_.get("chef_chantier",True)),"TD_C")],
-        [P("Sous-traitant","TD"),        P(_checkbox(ext.get("sous_traitant",False)),"TD_C"),
-         P("","TD"),                    P("","TD_C")],
-        [P("Coordinateur SPS","TD"),    P(_checkbox(ext.get("csps",True)),"TD_C"),
-         P("","TD"),                    P("","TD_C")],
+        [P("Maître d'ouvrage","TD"),   _chk(ext.get("moa",True)),
+         P("Service QSE","TD"),         _chk(int_.get("qse",True))],
+        [P("Maître d'œuvre","TD"),      _chk(ext.get("moe",True)),
+         P("Directeur travaux","TD"),   _chk(int_.get("dir_travaux",True))],
+        [P("Entreprise mandataire","TD"),_chk(ext.get("mandataire",False)),
+         P("Conducteur de travaux","TD"),_chk(int_.get("conducteur",False))],
+        [P("Entreprise cotraitante","TD"),_chk(ext.get("cotraitant",False)),
+         P("Chef de chantier","TD"),    _chk(int_.get("chef_chantier",True))],
+        [P("Sous-traitant","TD"),        _chk(ext.get("sous_traitant",False)),
+         P("","TD"),                    P("","TD")],
+        [P("Coordinateur SPS","TD"),    _chk(ext.get("csps",True)),
+         P("","TD"),                    P("","TD")],
     ]
     hw = (CONTENT_W - 2*cm) / 2
     dt = Table(diff_rows, colWidths=[hw*0.75, hw*0.25, hw*0.75, hw*0.25])
@@ -431,9 +465,9 @@ def _section_presentation(story, data):
         ("Durée d'intervention",      proj.get("duree","")),
         ("Effectif moyen propre",     proj.get("effectif_moyen","")),
         ("Avis d'ouverture de chantier",
-         _checkbox(proj.get("avis_ouverture",False)) + "  OUI    " +
-         _checkbox(not proj.get("avis_ouverture",False)) + "  NON   " +
-         "  (si > 1 semaine ET > 10 personnes)"),
+         _chk_row("",
+                  (proj.get("avis_ouverture", False), "OUI"),
+                  (not proj.get("avis_ouverture", False), "NON  (si > 1 semaine ET > 10 personnes)"))),
     ]
     story.append(_info_table(rows, col_w=[6*cm, CONTENT_W-6*cm]))
     story.append(SP(10))
@@ -529,17 +563,15 @@ def _section_organisation(story, data):
     story.append(SP(6))
 
     charge = inst.get("a_charge_entreprise", False)
-    story.append(P(f"Les installations de chantier sont-elles à la charge de l'entreprise ? "
-                   f"  {_checkbox(charge)} Oui   {_checkbox(not charge)} Non", "Body"))
+    story.append(P("Les installations de chantier sont-elles à la charge de l'entreprise ?", "Body"))
+    story.append(_chk_row("", (charge, "Oui"), (not charge, "Non")))
     story.append(SP(4))
 
     types = inst.get("types", [])
     type_labels = {"bungalow":"Bungalow","remorque":"Remorque VRS",
                    "locaux_existants":"Locaux existants","autre":"Autre"}
-    types_str = "   ".join(
-        f"{_checkbox(t in types)} {type_labels.get(t,t)}" for t in type_labels
-    )
-    story.append(P("Cantonnements prévus :  " + types_str, "Body"))
+    story.append(_chk_row("Cantonnements prévus :  ",
+                           *[(t in types, type_labels.get(t, t)) for t in type_labels]))
     story.append(SP(6))
 
     # Tableau locaux
@@ -570,18 +602,18 @@ def _section_organisation(story, data):
     story.append(SP(6))
 
     repas = inst.get("repas_sur_chantier", True)
-    story.append(P(f"Repas :  {_checkbox(repas)} Sur le chantier   "
-                   f"{_checkbox(not repas)} À l'extérieur", "Body"))
+    story.append(_chk_row("Repas :  ",
+                           (repas, "Sur le chantier"), (not repas, "À l'extérieur")))
 
     energies = inst.get("energies", [])
     e_map = {"reseau_elec":"Raccordement réseau électrique",
              "groupe":"Groupe électrogène","chauffage_gaz":"Chauffage auxiliaire gaz"}
-    e_str = "   ".join(f"{_checkbox(e in energies)} {e_map.get(e,e)}" for e in e_map)
-    story.append(P("Énergie :  " + e_str, "Body"))
+    story.append(_chk_row("Énergie :  ",
+                           *[(e in energies, e_map.get(e, e)) for e in e_map]))
 
     eau = inst.get("eau_potable","reseau")
-    story.append(P(f"Eau potable :  {_checkbox(eau=='bouteilles')} Bouteilles   "
-                   f"{_checkbox(eau=='reseau')} Raccordement réseau", "Body"))
+    story.append(_chk_row("Eau potable :  ",
+                           (eau == "bouteilles", "Bouteilles"), (eau == "reseau", "Raccordement réseau")))
 
     if inst.get("date_mise_en_service"):
         story.append(P("Date de mise en service des installations : "
