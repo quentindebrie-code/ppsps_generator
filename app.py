@@ -14,6 +14,11 @@ LOGO_PATH = os.path.join(
     "assets",
     "logo_da.png",
 )
+LOGO_PATH_HEADER = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "assets",
+    "logo_da_blanc.png",
+)
 
 st.set_page_config(page_title="Générateur PPSPS", page_icon="🏗️", layout="wide")
 
@@ -699,6 +704,7 @@ elif tab == 7:
                 main_pdf = generer_ppsps(
     data,
     logo_path=LOGO_PATH if os.path.exists(LOGO_PATH) else None,
+    logo_path_header=LOGO_PATH_HEADER if os.path.exists(LOGO_PATH_HEADER) else None,
 )
 
                 if ss.annexes:
