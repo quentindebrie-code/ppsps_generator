@@ -1,4 +1,3 @@
 reportlab
 pypdf
 streamlit
-svglib
