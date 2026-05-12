@@ -12,7 +12,7 @@ from ppsps_generator import generer_ppsps
 LOGO_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     "assets",
-    "logo_deldossi.svg",
+    "logo_da.png",
 )
 
 st.set_page_config(page_title="Générateur PPSPS", page_icon="🏗️", layout="wide")
