@@ -5,9 +5,15 @@ Navigation Précédent / Suivant avec persistance totale des données entre sect
 
 import csv
 import io
+import os
 import streamlit as st
 from pypdf import PdfReader, PdfWriter
 from ppsps_generator import generer_ppsps
+LOGO_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "assets",
+    "logo_deldossi.svg",
+)
 
 st.set_page_config(page_title="Générateur PPSPS", page_icon="🏗️", layout="wide")
 
@@ -690,7 +696,10 @@ elif tab == 7:
 
         with st.spinner("Génération en cours..."):
             try:
-                main_pdf = generer_ppsps(data)
+                main_pdf = generer_ppsps(
+    data,
+    logo_path=LOGO_PATH if os.path.exists(LOGO_PATH) else None,
+)
 
                 if ss.annexes:
                     writer = PdfWriter()
