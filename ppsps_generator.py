@@ -1,11 +1,11 @@
 """
 ppsps_generator.py — Génère un PPSPS professionnel en ReportLab Platypus.
-Contenu 100% dynamique : le document s'adapte à la quantité de données.
 
-Modifications v2 :
-  - Logo PNG Deldossi Assainissement intégré (page de couverture + en-têtes)
-  - En-tête augmenté à 40 pt pour supporter 2 lignes de titre
-  - Titre chantier : wrap automatique max 2 lignes, taille adaptative 8 → 6 pt
+Modifications v3 :
+  - Logo PNG couleur sur la page de couverture (centré, plus grand)
+  - Logo PNG blanc dans les en-têtes de pages
+  - En-tête 40 pt, titre chantier max 2 lignes, taille adaptative 8→6 pt
+  - Adresse/contact de couverture centrés sous le logo
 """
 
 import io
@@ -17,7 +17,7 @@ from reportlab.platypus import (
 )
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import cm, mm
+from reportlab.lib.units import cm
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT, TA_JUSTIFY
 from reportlab.platypus.flowables import Flowable
@@ -28,49 +28,49 @@ from reportlab.pdfbase.pdfmetrics import stringWidth
 NAVY      = colors.HexColor("#0D1B3E")
 NAVY_MID  = colors.HexColor("#1A3A6B")
 NAVY_LITE = colors.HexColor("#D6E4F0")
-ACCENT    = colors.HexColor("#2E75B6")
 ROW_ALT   = colors.HexColor("#F4F7FB")
 WHITE     = colors.white
 GREY_LINE = colors.HexColor("#CCCCCC")
 GREY_TEXT = colors.HexColor("#555555")
 BLACK     = colors.black
 
-PW, PH = A4
-ML = MR = 1.8 * cm
-MT = MB = 2.0 * cm
+PW, PH   = A4
+ML = MR  = 1.8 * cm
+MT = MB  = 2.0 * cm
 CONTENT_W = PW - ML - MR
+HEADER_H  = 40          # hauteur bande en-tête (était 28)
 
-HEADER_H = 40  # hauteur bande en-tête (était 28)
-
-# Ratio naturel du logo (viewBox SVG original 1320 x 274)
-_LOGO_RATIO = 1320 / 274  # ≈ 4.817
+# Ratio naturel du logo (viewBox SVG original 1320 × 274)
+_LOGO_RATIO = 1320 / 274   # ≈ 4.817
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# LOGO — PNG natif ReportLab (pas de dépendance externe)
+# LOGO
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _logo_flowable(logo_path, target_height):
-    """Retourne un RLImage redimensionné ou None si absent."""
+def _logo_flowable(logo_path, target_height, hAlign="LEFT"):
+    """Retourne un RLImage mis à l'échelle ou None si absent."""
     if not logo_path or not os.path.isfile(logo_path):
         return None
     try:
-        return RLImage(logo_path,
-                       width=target_height * _LOGO_RATIO,
-                       height=target_height)
+        img = RLImage(logo_path,
+                      width=target_height * _LOGO_RATIO,
+                      height=target_height)
+        img.hAlign = hAlign
+        return img
     except Exception:
         return None
 
 
 def _logo_w(logo_path, target_height):
-    """Largeur réelle du logo pour les calculs de mise en page."""
+    """Largeur effective du logo pour les calculs de layout."""
     if logo_path and os.path.isfile(logo_path):
         return target_height * _LOGO_RATIO
     return 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TITRE EN-TÊTE — wrap adaptatif (max 2 lignes, font 8 → 6 pt)
+# TITRE EN-TÊTE — wrap adaptatif max 2 lignes, police 8 → 6 pt
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def _wrap_title_for_header(title, available_width):
@@ -103,7 +103,6 @@ def _wrap_title_for_header(title, available_width):
         if split:
             return list(split), size
 
-    # Dernier recours : tronquer
     words = title.split()
     for size in [6.0]:
         for n in range(len(words), 0, -1):
@@ -137,11 +136,12 @@ def _build_styles():
         alignment=TA_CENTER, leading=13)
     add("Cover_Mention",  fontName="Helvetica-Oblique", fontSize=7.5, textColor=GREY_TEXT,
         alignment=TA_CENTER)
+
     add("H1", fontName="Helvetica-Bold", fontSize=11, textColor=WHITE,
         spaceBefore=8, spaceAfter=6, leading=14)
     add("H2", fontName="Helvetica-Bold", fontSize=9.5, textColor=NAVY,
         spaceBefore=6, spaceAfter=3, leading=13)
-    add("H3", fontName="Helvetica-Bold", fontSize=8.5, textColor=NAVY_MID,
+    add("H3", fontName="Helvetica-Bold", fontSize=8.5, textColor=NAVY,
         spaceBefore=4, spaceAfter=2, leading=11)
     add("Body",      fontName="Helvetica", fontSize=8.5, textColor=BLACK,
         spaceAfter=3, leading=12)
@@ -149,6 +149,7 @@ def _build_styles():
         spaceAfter=2, leading=10)
     add("BulletItem",fontName="Helvetica", fontSize=8.5, textColor=BLACK,
         leftIndent=12, firstLineIndent=-8, spaceAfter=2, leading=11)
+
     add("TH",     fontName="Helvetica-Bold", fontSize=8, textColor=WHITE,
         alignment=TA_CENTER, leading=10)
     add("TD",     fontName="Helvetica",      fontSize=8, textColor=BLACK,
@@ -157,14 +158,9 @@ def _build_styles():
         alignment=TA_CENTER, leading=10)
     add("TLabel", fontName="Helvetica-Bold", fontSize=8, textColor=NAVY, leading=10)
     add("TVal",   fontName="Helvetica",      fontSize=8, textColor=BLACK, leading=10)
+
     add("Footer",     fontName="Helvetica", fontSize=7, textColor=GREY_TEXT,
         alignment=TA_CENTER)
-    add("TOC_Entry",  fontName="Helvetica", fontSize=9, textColor=BLACK,
-        spaceAfter=3, leading=13)
-    add("TOC_Title",  fontName="Helvetica-Bold", fontSize=11, textColor=NAVY,
-        spaceAfter=8, leading=14)
-    add("Annex_Title",fontName="Helvetica-Bold", fontSize=13, textColor=NAVY,
-        spaceBefore=0, spaceAfter=10, leading=17, alignment=TA_CENTER)
     add("Risk_Phase", fontName="Helvetica-Bold", fontSize=7.5, textColor=NAVY, leading=9)
     add("Risk_Cell",  fontName="Helvetica",      fontSize=7,   textColor=BLACK,
         leading=9, spaceAfter=1)
@@ -181,7 +177,7 @@ class SectionHeader(Flowable):
     def __init__(self, number, title, width=CONTENT_W):
         super().__init__()
         self.number = number; self.title = title
-        self.width = width; self.height = 22
+        self.width = width;   self.height = 22
 
     def draw(self):
         c = self.canv
@@ -198,7 +194,7 @@ class SubSectionHeader(Flowable):
     def __init__(self, number, title, width=CONTENT_W):
         super().__init__()
         self.number = number; self.title = title
-        self.width = width; self.height = 17
+        self.width = width;   self.height = 17
 
     def draw(self):
         c = self.canv
@@ -227,12 +223,19 @@ class ColorRect(Flowable):
 # PAGE TEMPLATE
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _make_page_template(entreprise_nom, projet_intitule, logo_path=None):
-    logo_h   = HEADER_H - 12  # 28 pt (marge 6 pt haut/bas)
-    lw       = _logo_w(logo_path, logo_h)
-    left_used = ML + lw + 12 if lw > 0 else \
-                ML + stringWidth(entreprise_nom or "", "Helvetica-Bold", 9) + 15
-    title_lines, title_fs = _wrap_title_for_header(projet_intitule, (PW - MR) - left_used)
+def _make_page_template(entreprise_nom, projet_intitule,
+                        logo_path=None, logo_path_header=None):
+    """
+    logo_path        : logo couleur (couverture)
+    logo_path_header : logo blanc (en-têtes de pages)
+    """
+    _hlogo = logo_path_header if logo_path_header else logo_path
+    logo_h = HEADER_H - 12   # 28 pt
+    lw     = _logo_w(_hlogo, logo_h)
+    left_used = (ML + lw + 12) if lw > 0 else \
+                (ML + stringWidth(entreprise_nom or "", "Helvetica-Bold", 9) + 15)
+    title_lines, title_fs = _wrap_title_for_header(
+        projet_intitule, (PW - MR) - left_used)
     title_leading = title_fs * 1.4
 
     def _draw_header(canvas):
@@ -240,23 +243,23 @@ def _make_page_template(entreprise_nom, projet_intitule, logo_path=None):
         canvas.rect(0, PH - HEADER_H, PW, HEADER_H, fill=1, stroke=0)
         canvas.setFillColor(WHITE)
 
-        # Logo (gauche) ou texte fallback
-        if logo_path and os.path.isfile(logo_path):
+        if _hlogo and os.path.isfile(_hlogo):
             logo_y = PH - HEADER_H + (HEADER_H - logo_h) / 2
-            canvas.drawImage(logo_path, ML, logo_y,
+            canvas.drawImage(_hlogo, ML, logo_y,
                              width=lw, height=logo_h,
                              preserveAspectRatio=True, mask="auto")
         else:
             canvas.setFont("Helvetica-Bold", 9)
             canvas.drawString(ML, PH - HEADER_H / 2 - 4, entreprise_nom or "")
 
-        # Titre (droite, max 2 lignes)
         if title_lines:
             canvas.setFillColor(WHITE)
             canvas.setFont("Helvetica", title_fs)
             rx = PW - MR
             if len(title_lines) == 1:
-                canvas.drawRightString(rx, PH - HEADER_H / 2 - title_fs / 2 + 1, title_lines[0])
+                canvas.drawRightString(rx,
+                    PH - HEADER_H / 2 - title_fs / 2 + 1,
+                    title_lines[0])
             else:
                 block_h = title_fs + title_leading
                 y_top   = PH - HEADER_H / 2 + block_h / 2 - title_fs
@@ -306,21 +309,24 @@ def HR():
 def _info_table(rows, col_w=None):
     if col_w is None:
         col_w = [5.5 * cm, CONTENT_W - 5.5 * cm]
-    data = [[P(label, "TLabel"), P(val or "—", "TVal") if isinstance(val, str) else val]
+    data = [[P(label, "TLabel"),
+             P(val or "—", "TVal") if isinstance(val, str) else val]
             for label, val in rows]
     t = Table(data, colWidths=col_w, hAlign="LEFT")
     t.setStyle(TableStyle([
-        ("VALIGN", (0,0),(-1,-1), "TOP"),
-        ("TOPPADDING", (0,0),(-1,-1), 3), ("BOTTOMPADDING",(0,0),(-1,-1), 3),
-        ("LEFTPADDING",(0,0),(-1,-1), 4), ("RIGHTPADDING",(0,0),(-1,-1), 4),
-        ("ROWBACKGROUNDS",(0,0),(-1,-1),[WHITE,ROW_ALT]),
-        ("GRID",(0,0),(-1,-1),0.3,GREY_LINE),
+        ("VALIGN",        (0,0), (-1,-1), "TOP"),
+        ("TOPPADDING",    (0,0), (-1,-1), 3),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 3),
+        ("LEFTPADDING",   (0,0), (-1,-1), 4),
+        ("RIGHTPADDING",  (0,0), (-1,-1), 4),
+        ("ROWBACKGROUNDS",(0,0), (-1,-1), [WHITE, ROW_ALT]),
+        ("GRID",          (0,0), (-1,-1), 0.3, GREY_LINE),
     ]))
     return t
 
 def _chk(checked, size=7):
     d = Drawing(size+2, size+2)
-    d.add(Rect(1,1,size,size,
+    d.add(Rect(1, 1, size, size,
                fillColor=BLACK if checked else WHITE,
                strokeColor=BLACK, strokeWidth=0.8))
     return d
@@ -329,16 +335,18 @@ def _chk_row(prefix, *options):
     cells, widths = [], []
     FONT, FS = "Helvetica", 8.5
     if prefix:
-        cells.append(P(prefix,"Body"))
-        widths.append(stringWidth(prefix,FONT,FS)+4)
+        cells.append(P(prefix, "Body"))
+        widths.append(stringWidth(prefix, FONT, FS) + 4)
     for checked, label in options:
-        cells += [_chk(checked), P(f" {label}","Body")]
-        widths += [0.35*cm, stringWidth(f" {label}",FONT,FS)+8]
+        cells += [_chk(checked), P(f" {label}", "Body")]
+        widths += [0.35 * cm, stringWidth(f" {label}", FONT, FS) + 8]
     t = Table([cells], colWidths=widths, hAlign="LEFT")
     t.setStyle(TableStyle([
-        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
-        ("TOPPADDING",(0,0),(-1,-1),0), ("BOTTOMPADDING",(0,0),(-1,-1),3),
-        ("LEFTPADDING",(0,0),(-1,-1),0), ("RIGHTPADDING",(0,0),(-1,-1),0),
+        ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+        ("TOPPADDING",    (0,0), (-1,-1), 0),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 3),
+        ("LEFTPADDING",   (0,0), (-1,-1), 0),
+        ("RIGHTPADDING",  (0,0), (-1,-1), 0),
     ]))
     return t
 
@@ -350,38 +358,48 @@ def _chk_row(prefix, *options):
 def _page_cover(story, data, logo_path=None):
     ent  = data.get("entreprise", {})
     proj = data.get("projet", {})
-    story.append(SP(10))
 
-    cover_logo = _logo_flowable(logo_path, target_height=45)
+    story.append(SP(20))   # espace avant le logo (plus généreux)
+
+    # Logo couleur, centré, plus grand qu'avant
+    cover_logo = _logo_flowable(logo_path, target_height=55, hAlign="CENTER")
     if cover_logo:
         story.append(cover_logo)
-        story.append(SP(4))
+        story.append(SP(14))
     else:
-        story.append(P(ent.get("nom",""), "Cover_Company"))
+        story.append(P(ent.get("nom", ""), "Cover_Company"))
+        story.append(SP(4))
 
+    # Adresse et contact centrés sous le logo
     if ent.get("adresse"):
-        story.append(P(ent["adresse"], "Cover_Address"))
-    contact = " | ".join(filter(None,[ent.get("telephone"),ent.get("email")]))
+        story.append(P(ent["adresse"], "Cover_Meta"))
+    contact = " | ".join(filter(None, [ent.get("telephone"), ent.get("email")]))
     if contact:
-        story.append(P(contact,"Cover_Address"))
-    story.append(SP(20))
+        story.append(P(contact, "Cover_Meta"))
 
-    tt = Table([[P("PLAN PARTICULIER DE SÉCURITÉ","Cover_Title")],
-                [P("ET DE PROTECTION DE LA SANTÉ","Cover_Title")],
-                [P("P.P.S.P.S.","Cover_Subtitle")]], colWidths=[CONTENT_W])
+    story.append(SP(28))
+
+    # Bandeau titre PPSPS
+    tt = Table(
+        [[P("PLAN PARTICULIER DE SÉCURITÉ", "Cover_Title")],
+         [P("ET DE PROTECTION DE LA SANTÉ",  "Cover_Title")],
+         [P("P.P.S.P.S.",                    "Cover_Subtitle")]],
+        colWidths=[CONTENT_W])
     tt.setStyle(TableStyle([
-        ("BACKGROUND",(0,0),(-1,-1),NAVY),
-        ("TOPPADDING",(0,0),(-1,-1),10), ("BOTTOMPADDING",(0,0),(-1,-1),10),
-        ("LEFTPADDING",(0,0),(-1,-1),12), ("RIGHTPADDING",(0,0),(-1,-1),12),
+        ("BACKGROUND",    (0,0), (-1,-1), NAVY),
+        ("TOPPADDING",    (0,0), (-1,-1), 10),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 10),
+        ("LEFTPADDING",   (0,0), (-1,-1), 12),
+        ("RIGHTPADDING",  (0,0), (-1,-1), 12),
     ]))
     story.append(tt)
     story.append(SP(20))
 
-    client, intitule = proj.get("client",""), proj.get("intitule","")
+    client, intitule = proj.get("client", ""), proj.get("intitule", "")
     if client or intitule:
-        story.append(P(client or intitule,"Cover_Client"))
+        story.append(P(client or intitule, "Cover_Client"))
         if client and intitule:
-            story.append(P(intitule,"Cover_Meta"))
+            story.append(P(intitule, "Cover_Meta"))
     story.append(SP(8))
 
     meta_rows = []
@@ -389,293 +407,422 @@ def _page_cover(story, data, logo_path=None):
     if proj.get("date_debut"): meta_rows.append(("Date de début :", proj["date_debut"]))
     if proj.get("duree"):      meta_rows.append(("Durée :",         proj["duree"]))
     if meta_rows:
-        story.append(_info_table(meta_rows, col_w=[4*cm, CONTENT_W-4*cm]))
+        story.append(_info_table(meta_rows, col_w=[4*cm, CONTENT_W - 4*cm]))
+
     story.append(SP(30))
 
-    it = Table([[P("Indice","TH"),P("Date","TH"),P("Nature de révision","TH")],
-                [P("A","TD_C"),P(proj.get("date_creation",""),"TD_C"),
-                 P("Création du document","TD")]],
-               colWidths=[2*cm,4*cm,CONTENT_W-6*cm])
+    it = Table(
+        [[P("Indice","TH"), P("Date","TH"), P("Nature de révision","TH")],
+         [P("A","TD_C"), P(proj.get("date_creation",""),"TD_C"),
+          P("Création du document","TD")]],
+        colWidths=[2*cm, 4*cm, CONTENT_W - 6*cm])
     it.setStyle(TableStyle([
-        ("BACKGROUND",(0,0),(-1,0),NAVY_MID), ("GRID",(0,0),(-1,-1),0.3,GREY_LINE),
-        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
-        ("TOPPADDING",(0,0),(-1,-1),4), ("BOTTOMPADDING",(0,0),(-1,-1),4),
-        ("LEFTPADDING",(0,0),(-1,-1),6),
-        ("ROWBACKGROUNDS",(0,1),(-1,-1),[WHITE,ROW_ALT]),
+        ("BACKGROUND",    (0,0), (-1,0), NAVY_MID),
+        ("GRID",          (0,0), (-1,-1), 0.3, GREY_LINE),
+        ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+        ("TOPPADDING",    (0,0), (-1,-1), 4),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+        ("LEFTPADDING",   (0,0), (-1,-1), 6),
+        ("ROWBACKGROUNDS",(0,1), (-1,-1), [WHITE, ROW_ALT]),
     ]))
     story.append(it)
     story.append(SP(30))
-    story.append(P("Page : 1/—","Cover_Mention"))
-    story.append(P("Ce document est la propriété de "+(ent.get("nom",""))
-                   +". Il ne peut être diffusé ou reproduit sans son autorisation.","Cover_Mention"))
+    story.append(P("Page : 1/—", "Cover_Mention"))
+    story.append(P(
+        "Ce document est la propriété de " + (ent.get("nom",""))
+        + ". Il ne peut être diffusé ou reproduit sans son autorisation.",
+        "Cover_Mention"))
     story.append(PageBreak())
 
 
 def _section_gestion(story, data):
-    proj=data.get("projet",{}); ent=data.get("entreprise",{}); gestion=data.get("gestion",{})
-    story.append(SectionHeader("1","GESTION ET DIFFUSION")); story.append(SP(6))
-    story.append(SubSectionHeader("1.1","Révisions")); story.append(SP(4))
-    story.append(P("La mise à jour du PPSPS suit le même circuit de validation et de vérification. "
-                   "Selon l'évolution des tâches d'exécution, un additif au PPSPS est préparé et validé "
-                   "préalablement à toute intervention.","Body"))
+    proj    = data.get("projet", {})
+    ent     = data.get("entreprise", {})
+    gestion = data.get("gestion", {})
+
+    story.append(SectionHeader("1", "GESTION ET DIFFUSION"))
+    story.append(SP(6))
+    story.append(SubSectionHeader("1.1", "Révisions"))
     story.append(SP(4))
-    elab=gestion.get("elaboration",ent.get("responsable_technique",""))
-    verif=gestion.get("verification",ent.get("responsable_technique",""))
-    appro=gestion.get("approbation",ent.get("chef_chantier",""))
-    rt=Table([[P("Élaboration","TH"),P("Vérification","TH"),P("Approbation","TH"),
-               P("Avis du CSE","TH"),P("Avis médecin du travail","TH")],
-              [P(elab,"TD_C"),P(verif,"TD_C"),P(appro,"TD_C"),P("","TD_C"),P("","TD_C")]],
-             colWidths=[CONTENT_W/5]*5)
+    story.append(P(
+        "La mise à jour du PPSPS suit le même circuit de validation et de vérification. "
+        "Selon l'évolution des tâches d'exécution, un additif au PPSPS est préparé et validé "
+        "préalablement à toute intervention.", "Body"))
+    story.append(SP(4))
+
+    elab  = gestion.get("elaboration",  ent.get("responsable_technique", ""))
+    verif = gestion.get("verification", ent.get("responsable_technique", ""))
+    appro = gestion.get("approbation",  ent.get("chef_chantier", ""))
+
+    rt = Table(
+        [[P("Élaboration","TH"), P("Vérification","TH"), P("Approbation","TH"),
+          P("Avis du CSE","TH"), P("Avis médecin du travail","TH")],
+         [P(elab,"TD_C"), P(verif,"TD_C"), P(appro,"TD_C"), P("","TD_C"), P("","TD_C")]],
+        colWidths=[CONTENT_W/5]*5)
     rt.setStyle(TableStyle([
-        ("BACKGROUND",(0,0),(-1,0),NAVY_MID), ("GRID",(0,0),(-1,-1),0.3,GREY_LINE),
-        ("VALIGN",(0,0),(-1,-1),"MIDDLE"), ("ALIGN",(0,0),(-1,-1),"CENTER"),
-        ("TOPPADDING",(0,0),(-1,-1),5), ("BOTTOMPADDING",(0,0),(-1,-1),5),
-        ("ROWBACKGROUNDS",(0,1),(-1,-1),[WHITE]),
+        ("BACKGROUND",    (0,0), (-1,0), NAVY_MID),
+        ("GRID",          (0,0), (-1,-1), 0.3, GREY_LINE),
+        ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+        ("ALIGN",         (0,0), (-1,-1), "CENTER"),
+        ("TOPPADDING",    (0,0), (-1,-1), 5),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+        ("ROWBACKGROUNDS",(0,1), (-1,-1), [WHITE]),
     ]))
-    story.append(rt); story.append(SP(8))
+    story.append(rt)
+    story.append(SP(8))
 
-    story.append(SubSectionHeader("1.2","Suivi des révisions")); story.append(SP(4))
-    suivis=gestion.get("suivis",[{"indice":"A","date":proj.get("date_creation",""),"nature":"Création du document"}])
-    sd=[[P("Indice","TH"),P("Date","TH"),P("Nature de révision","TH")]]+\
-       [[P(s.get("indice",""),"TD_C"),P(s.get("date",""),"TD_C"),P(s.get("nature",""),"TD")] for s in suivis]
-    st2=Table(sd,colWidths=[2*cm,4*cm,CONTENT_W-6*cm])
+    story.append(SubSectionHeader("1.2", "Suivi des révisions"))
+    story.append(SP(4))
+    suivis = gestion.get("suivis", [
+        {"indice":"A", "date":proj.get("date_creation",""),
+         "nature":"Création du document"}])
+    sd = ([[P("Indice","TH"), P("Date","TH"), P("Nature de révision","TH")]] +
+          [[P(s.get("indice",""),"TD_C"), P(s.get("date",""),"TD_C"),
+            P(s.get("nature",""),"TD")] for s in suivis])
+    st2 = Table(sd, colWidths=[2*cm, 4*cm, CONTENT_W - 6*cm])
     st2.setStyle(TableStyle([
-        ("BACKGROUND",(0,0),(-1,0),NAVY_MID), ("GRID",(0,0),(-1,-1),0.3,GREY_LINE),
-        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
-        ("TOPPADDING",(0,0),(-1,-1),4), ("BOTTOMPADDING",(0,0),(-1,-1),4),
-        ("LEFTPADDING",(0,0),(-1,-1),6),
-        ("ROWBACKGROUNDS",(0,1),(-1,-1),[WHITE,ROW_ALT]),
+        ("BACKGROUND",    (0,0), (-1,0), NAVY_MID),
+        ("GRID",          (0,0), (-1,-1), 0.3, GREY_LINE),
+        ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+        ("TOPPADDING",    (0,0), (-1,-1), 4),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+        ("LEFTPADDING",   (0,0), (-1,-1), 6),
+        ("ROWBACKGROUNDS",(0,1), (-1,-1), [WHITE, ROW_ALT]),
     ]))
-    story.append(st2); story.append(SP(8))
+    story.append(st2)
+    story.append(SP(8))
 
-    story.append(SubSectionHeader("1.3","Diffusion")); story.append(SP(4))
-    diffusion=gestion.get("diffusion",{}); ext=diffusion.get("externes",{}); int_=diffusion.get("internes",{})
-    hw=(CONTENT_W-2*cm)/2
-    dt=Table([
-        [P("INTERVENANTS EXTERNES","TH"),P("Diffusé","TH"),P("INTERVENANTS INTERNES","TH"),P("Diffusé","TH")],
-        [P("Maître d'ouvrage","TD"),_chk(ext.get("moa",True)),P("Service QSE","TD"),_chk(int_.get("qse",True))],
-        [P("Maître d'œuvre","TD"),_chk(ext.get("moe",True)),P("Directeur travaux","TD"),_chk(int_.get("dir_travaux",True))],
-        [P("Entreprise mandataire","TD"),_chk(ext.get("mandataire",False)),P("Conducteur de travaux","TD"),_chk(int_.get("conducteur",False))],
-        [P("Entreprise cotraitante","TD"),_chk(ext.get("cotraitant",False)),P("Chef de chantier","TD"),_chk(int_.get("chef_chantier",True))],
-        [P("Sous-traitant","TD"),_chk(ext.get("sous_traitant",False)),P("","TD"),P("","TD")],
-        [P("Coordinateur SPS","TD"),_chk(ext.get("csps",True)),P("","TD"),P("","TD")],
-    ],colWidths=[hw*0.75,hw*0.25,hw*0.75,hw*0.25])
+    story.append(SubSectionHeader("1.3", "Diffusion"))
+    story.append(SP(4))
+    diffusion = gestion.get("diffusion", {})
+    ext  = diffusion.get("externes", {})
+    int_ = diffusion.get("internes", {})
+    hw   = (CONTENT_W - 2*cm) / 2
+    dt = Table([
+        [P("INTERVENANTS EXTERNES","TH"), P("Diffusé","TH"),
+         P("INTERVENANTS INTERNES","TH"), P("Diffusé","TH")],
+        [P("Maître d'ouvrage","TD"),      _chk(ext.get("moa",True)),
+         P("Service QSE","TD"),           _chk(int_.get("qse",True))],
+        [P("Maître d'œuvre","TD"),        _chk(ext.get("moe",True)),
+         P("Directeur travaux","TD"),     _chk(int_.get("dir_travaux",True))],
+        [P("Entreprise mandataire","TD"), _chk(ext.get("mandataire",False)),
+         P("Conducteur de travaux","TD"),_chk(int_.get("conducteur",False))],
+        [P("Entreprise cotraitante","TD"),_chk(ext.get("cotraitant",False)),
+         P("Chef de chantier","TD"),      _chk(int_.get("chef_chantier",True))],
+        [P("Sous-traitant","TD"),         _chk(ext.get("sous_traitant",False)),
+         P("","TD"), P("","TD")],
+        [P("Coordinateur SPS","TD"),      _chk(ext.get("csps",True)),
+         P("","TD"), P("","TD")],
+    ], colWidths=[hw*0.75, hw*0.25, hw*0.75, hw*0.25])
     dt.setStyle(TableStyle([
-        ("BACKGROUND",(0,0),(-1,0),NAVY_MID), ("GRID",(0,0),(-1,-1),0.3,GREY_LINE),
-        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
-        ("ALIGN",(1,0),(1,-1),"CENTER"), ("ALIGN",(3,0),(3,-1),"CENTER"),
-        ("TOPPADDING",(0,0),(-1,-1),4), ("BOTTOMPADDING",(0,0),(-1,-1),4),
-        ("LEFTPADDING",(0,0),(-1,-1),6),
-        ("ROWBACKGROUNDS",(0,1),(-1,-1),[WHITE,ROW_ALT]),
+        ("BACKGROUND",    (0,0), (-1,0), NAVY_MID),
+        ("GRID",          (0,0), (-1,-1), 0.3, GREY_LINE),
+        ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+        ("ALIGN",         (1,0), (1,-1),  "CENTER"),
+        ("ALIGN",         (3,0), (3,-1),  "CENTER"),
+        ("TOPPADDING",    (0,0), (-1,-1), 4),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+        ("LEFTPADDING",   (0,0), (-1,-1), 6),
+        ("ROWBACKGROUNDS",(0,1), (-1,-1), [WHITE, ROW_ALT]),
     ]))
-    story.append(dt); story.append(PageBreak())
+    story.append(dt)
+    story.append(PageBreak())
 
 
 def _section_presentation(story, data):
-    proj=data.get("projet",{})
-    story.append(SectionHeader("2","PRÉSENTATION DES TRAVAUX")); story.append(SP(6))
-    rows=[
-        ("Intitulé du chantier",proj.get("intitule","")),
-        ("Client / Maître d'ouvrage",proj.get("client","")),
-        ("Situation des travaux",proj.get("situation","")),
-        ("Type d'ouvrage",proj.get("type_ouvrage","")),
-        ("Description des travaux",proj.get("description","")),
-        ("Date de début",proj.get("date_debut","")),
-        ("Durée d'intervention",proj.get("duree","")),
-        ("Effectif moyen propre",proj.get("effectif_moyen","")),
+    proj = data.get("projet", {})
+    story.append(SectionHeader("2", "PRÉSENTATION DES TRAVAUX"))
+    story.append(SP(6))
+    rows = [
+        ("Intitulé du chantier",        proj.get("intitule","")),
+        ("Client / Maître d'ouvrage",   proj.get("client","")),
+        ("Situation des travaux",        proj.get("situation","")),
+        ("Type d'ouvrage",              proj.get("type_ouvrage","")),
+        ("Description des travaux",     proj.get("description","")),
+        ("Date de début",               proj.get("date_debut","")),
+        ("Durée d'intervention",        proj.get("duree","")),
+        ("Effectif moyen propre",       proj.get("effectif_moyen","")),
         ("Avis d'ouverture de chantier",
-         _chk_row("",(proj.get("avis_ouverture",False),"OUI"),
-                  (not proj.get("avis_ouverture",False),"NON (si > 1 semaine ET > 10 personnes)"))),
+         _chk_row("",
+                  (proj.get("avis_ouverture",False), "OUI"),
+                  (not proj.get("avis_ouverture",False),
+                   "NON (si > 1 semaine ET > 10 personnes)"))),
     ]
-    story.append(_info_table(rows,col_w=[6*cm,CONTENT_W-6*cm])); story.append(SP(10))
-    story.append(SectionHeader("3","ACCÈS AU SITE")); story.append(SP(6))
-    acces=data.get("acces_site","")
-    story.append(P("L'accès au chantier se fera par :","Body"))
-    story.append(P(acces if acces else "—","Body")); story.append(SP(10))
+    story.append(_info_table(rows, col_w=[6*cm, CONTENT_W - 6*cm]))
+    story.append(SP(10))
+    story.append(SectionHeader("3", "ACCÈS AU SITE"))
+    story.append(SP(6))
+    acces = data.get("acces_site", "")
+    story.append(P("L'accès au chantier se fera par :", "Body"))
+    story.append(P(acces if acces else "—", "Body"))
+    story.append(SP(10))
 
 
 def _section_intervenants(story, data):
-    interv=data.get("intervenants",{})
-    story.append(SectionHeader("4","INTERVENANTS ET CONTACTS")); story.append(SP(6))
-    story.append(SubSectionHeader("4.1","Intervenants du marché")); story.append(SP(4))
+    interv = data.get("intervenants", {})
+    story.append(SectionHeader("4", "INTERVENANTS ET CONTACTS"))
+    story.append(SP(6))
+    story.append(SubSectionHeader("4.1", "Intervenants du marché"))
+    story.append(SP(4))
 
     def bloc(titre, d):
         if not d: return []
-        items=[SP(4),P(titre,"H3")]
-        rows=[(label,d.get(k,"")) for k,label in [
-            ("nom","Nom / Raison sociale"),("adresse","Adresse"),
-            ("interlocuteur","Interlocuteur référent"),("telephone","Téléphone"),("email","Mail")]
-            if d.get(k,"")]
+        items = [SP(4), P(titre, "H3")]
+        rows = [(label, d.get(k,""))
+                for k, label in [
+                    ("nom","Nom / Raison sociale"), ("adresse","Adresse"),
+                    ("interlocuteur","Interlocuteur référent"),
+                    ("telephone","Téléphone"), ("email","Mail")]
+                if d.get(k,"")]
         if rows: items.append(_info_table(rows))
         return items
 
-    ent=data.get("entreprise",{})
-    for titre,d in [
-        ("Maître d'ouvrage",interv.get("moa",{})),
-        ("Maîtrise d'œuvre",interv.get("moe",{})),
-        ("Entreprise",{"nom":ent.get("nom",""),"adresse":ent.get("adresse",""),
-                       "telephone":ent.get("telephone",""),"email":ent.get("email",""),
-                       "interlocuteur":ent.get("responsable_technique","")}),
+    ent = data.get("entreprise", {})
+    for titre, d in [
+        ("Maître d'ouvrage",  interv.get("moa",{})),
+        ("Maîtrise d'œuvre",  interv.get("moe",{})),
+        ("Entreprise", {
+            "nom":           ent.get("nom",""),
+            "adresse":       ent.get("adresse",""),
+            "telephone":     ent.get("telephone",""),
+            "email":         ent.get("email",""),
+            "interlocuteur": ent.get("responsable_technique",""),
+        }),
     ]:
-        for fl in bloc(titre,d): story.append(fl)
+        for fl in bloc(titre, d): story.append(fl)
 
     story.append(SP(8))
-    story.append(SubSectionHeader("4.2","Intervenants de la prévention")); story.append(SP(4))
-    for titre,key in [("Coordinateur SPS","csps"),("Inspection du travail","inspection_travail"),
-                      ("Médecine du travail","medecine_travail")]:
-        for fl in bloc(titre,interv.get(key,{})): story.append(fl)
+    story.append(SubSectionHeader("4.2", "Intervenants de la prévention"))
+    story.append(SP(4))
+    for titre, key in [("Coordinateur SPS","csps"),
+                        ("Inspection du travail","inspection_travail"),
+                        ("Médecine du travail","medecine_travail")]:
+        for fl in bloc(titre, interv.get(key,{})): story.append(fl)
     story.append(PageBreak())
 
 
 def _section_organisation(story, data):
-    org=data.get("organisation",{}); inst=data.get("installation",{})
-    story.append(SectionHeader("5","ORGANISATION DE CHANTIER")); story.append(SP(6))
-    story.append(SubSectionHeader("5.1","Organisation de l'équipe d'exécution")); story.append(SP(6))
-    membres=org.get("membres",[])
+    org  = data.get("organisation", {})
+    inst = data.get("installation", {})
+
+    story.append(SectionHeader("5", "ORGANISATION DE CHANTIER"))
+    story.append(SP(6))
+    story.append(SubSectionHeader("5.1", "Organisation de l'équipe d'exécution"))
+    story.append(SP(6))
+    membres = org.get("membres", [])
     if membres:
-        ot=Table([[P("Rôle","TH"),P("Nom / Prénom","TH")]]+
-                 [[P(m.get("role",""),"TD"),P(m.get("nom",""),"TD")] for m in membres],
-                 colWidths=[CONTENT_W*0.4,CONTENT_W*0.6])
+        ot = Table(
+            [[P("Rôle","TH"), P("Nom / Prénom","TH")]] +
+            [[P(m.get("role",""),"TD"), P(m.get("nom",""),"TD")] for m in membres],
+            colWidths=[CONTENT_W*0.4, CONTENT_W*0.6])
         ot.setStyle(TableStyle([
-            ("BACKGROUND",(0,0),(-1,0),NAVY_MID),("GRID",(0,0),(-1,-1),0.3,GREY_LINE),
-            ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
-            ("LEFTPADDING",(0,0),(-1,-1),6),("ROWBACKGROUNDS",(0,1),(-1,-1),[WHITE,ROW_ALT]),
+            ("BACKGROUND",    (0,0), (-1,0), NAVY_MID),
+            ("GRID",          (0,0), (-1,-1), 0.3, GREY_LINE),
+            ("TOPPADDING",    (0,0), (-1,-1), 4),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+            ("LEFTPADDING",   (0,0), (-1,-1), 6),
+            ("ROWBACKGROUNDS",(0,1), (-1,-1), [WHITE, ROW_ALT]),
         ]))
         story.append(ot)
     else:
-        story.append(P("—","Body"))
+        story.append(P("—", "Body"))
 
-    story.append(SP(10)); story.append(SectionHeader("6","INSTALLATION DE CHANTIER")); story.append(SP(6))
-    charge=inst.get("a_charge_entreprise",False)
+    story.append(SP(10))
+    story.append(SectionHeader("6", "INSTALLATION DE CHANTIER"))
+    story.append(SP(6))
+    charge = inst.get("a_charge_entreprise", False)
     story.append(P("Les installations de chantier sont-elles à la charge de l'entreprise ?","Body"))
-    story.append(_chk_row("",(charge,"Oui"),(not charge,"Non"))); story.append(SP(4))
-    types=inst.get("types",[])
-    type_labels={"bungalow":"Bungalow","remorque":"Remorque VRS","locaux_existants":"Locaux existants","autre":"Autre"}
-    story.append(_chk_row("Cantonnements prévus : ",*[(t in types,type_labels.get(t,t)) for t in type_labels]))
+    story.append(_chk_row("", (charge,"Oui"), (not charge,"Non")))
+    story.append(SP(4))
+    types = inst.get("types", [])
+    type_labels = {"bungalow":"Bungalow","remorque":"Remorque VRS",
+                   "locaux_existants":"Locaux existants","autre":"Autre"}
+    story.append(_chk_row("Cantonnements prévus : ",
+                           *[(t in types, type_labels.get(t,t)) for t in type_labels]))
     story.append(SP(6))
 
-    eqp_std={"vestiaire":"Bancs/chaises · Patères · Armoire-vestiaire/pers.",
-              "refectoire":"Tables/chaises · Micro-ondes · Réfrigérateur · 1 robinet/10 pers.",
-              "sanitaire":"Douches · WC · Chauffe-eau · Chauffage"}
-    lt=Table([[P("Locaux","TH"),P("Nombre","TH"),P("Surface","TH"),P("Équipements inclus","TH"),P("Commentaires","TH")]]+
-             [[P(lbl,"TD"),P(str(inst.get(k,{}).get("nombre","")),"TD_C"),
-               P(inst.get(k,{}).get("surface",""),"TD_C"),P(eqp_std[k],"TD"),
-               P(inst.get(k,{}).get("commentaires",""),"TD")]
-              for k,lbl in [("vestiaire","Vestiaire"),("refectoire","Réfectoire"),("sanitaire","Sanitaire")]],
-             colWidths=[2.5*cm,1.8*cm,1.8*cm,6*cm,CONTENT_W-12.1*cm])
+    eqp_std = {
+        "vestiaire": "Bancs/chaises · Patères · Armoire-vestiaire/pers.",
+        "refectoire": "Tables/chaises · Micro-ondes · Réfrigérateur · 1 robinet/10 pers.",
+        "sanitaire":  "Douches · WC · Chauffe-eau · Chauffage",
+    }
+    lt = Table(
+        [[P("Locaux","TH"), P("Nombre","TH"), P("Surface","TH"),
+          P("Équipements inclus","TH"), P("Commentaires","TH")]] +
+        [[P(lbl,"TD"),
+          P(str(inst.get(k,{}).get("nombre","")),"TD_C"),
+          P(inst.get(k,{}).get("surface",""),"TD_C"),
+          P(eqp_std[k],"TD"),
+          P(inst.get(k,{}).get("commentaires",""),"TD")]
+         for k, lbl in [("vestiaire","Vestiaire"),
+                         ("refectoire","Réfectoire"),
+                         ("sanitaire","Sanitaire")]],
+        colWidths=[2.5*cm, 1.8*cm, 1.8*cm, 6*cm, CONTENT_W - 12.1*cm])
     lt.setStyle(TableStyle([
-        ("BACKGROUND",(0,0),(-1,0),NAVY_MID),("GRID",(0,0),(-1,-1),0.3,GREY_LINE),
-        ("VALIGN",(0,0),(-1,-1),"TOP"),
-        ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
-        ("LEFTPADDING",(0,0),(-1,-1),5),("ROWBACKGROUNDS",(0,1),(-1,-1),[WHITE,ROW_ALT]),
+        ("BACKGROUND",    (0,0), (-1,0), NAVY_MID),
+        ("GRID",          (0,0), (-1,-1), 0.3, GREY_LINE),
+        ("VALIGN",        (0,0), (-1,-1), "TOP"),
+        ("TOPPADDING",    (0,0), (-1,-1), 4),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+        ("LEFTPADDING",   (0,0), (-1,-1), 5),
+        ("ROWBACKGROUNDS",(0,1), (-1,-1), [WHITE, ROW_ALT]),
     ]))
-    story.append(lt); story.append(SP(6))
+    story.append(lt)
+    story.append(SP(6))
 
-    repas=inst.get("repas_sur_chantier",True)
-    story.append(_chk_row("Repas : ",(repas,"Sur le chantier"),(not repas,"À l'extérieur")))
-    energies=inst.get("energies",[])
-    e_map={"reseau_elec":"Raccordement réseau électrique","groupe":"Groupe électrogène","chauffage_gaz":"Chauffage auxiliaire gaz"}
-    story.append(_chk_row("Énergie : ",*[(e in energies,e_map.get(e,e)) for e in e_map]))
-    eau=inst.get("eau_potable","reseau")
-    story.append(_chk_row("Eau potable : ",(eau=="bouteilles","Bouteilles"),(eau=="reseau","Raccordement réseau")))
+    repas    = inst.get("repas_sur_chantier", True)
+    energies = inst.get("energies", [])
+    e_map    = {"reseau_elec":"Raccordement réseau électrique",
+                "groupe":"Groupe électrogène",
+                "chauffage_gaz":"Chauffage auxiliaire gaz"}
+    eau = inst.get("eau_potable","reseau")
+
+    story.append(_chk_row("Repas : ",
+                           (repas,"Sur le chantier"),(not repas,"À l'extérieur")))
+    story.append(_chk_row("Énergie : ",
+                           *[(e in energies, e_map.get(e,e)) for e in e_map]))
+    story.append(_chk_row("Eau potable : ",
+                           (eau=="bouteilles","Bouteilles"),
+                           (eau=="reseau","Raccordement réseau")))
     if inst.get("date_mise_en_service"):
-        story.append(P("Date de mise en service des installations : "+inst["date_mise_en_service"],"Body"))
+        story.append(P("Date de mise en service des installations : "
+                       + inst["date_mise_en_service"],"Body"))
     story.append(PageBreak())
 
 
 def _section_secours(story, data):
-    sec=data.get("secours",{})
-    story.append(SectionHeader("7","ORGANISATION DES SECOURS")); story.append(SP(6))
-    story.append(SubSectionHeader("7.1","Organisation des appels de secours")); story.append(SP(4))
-    story.append(P("Les points de rendez-vous sont définis et validés par le CSPS. En cas d'accident, "
-                   "le point de rendez-vous le plus proche sera communiqué aux secours. "
-                   "La fiche d'appel de secours est affichée dans le bureau du chantier.","Body"))
+    sec = data.get("secours", {})
+    story.append(SectionHeader("7","ORGANISATION DES SECOURS"))
     story.append(SP(6))
-    rows=[]
+    story.append(SubSectionHeader("7.1","Organisation des appels de secours"))
+    story.append(SP(4))
+    story.append(P(
+        "Les points de rendez-vous sont définis et validés par le CSPS. En cas d'accident, "
+        "le point de rendez-vous le plus proche sera communiqué aux secours. "
+        "La fiche d'appel de secours est affichée dans le bureau du chantier.","Body"))
+    story.append(SP(6))
+    rows = []
     if sec.get("telephone_urgence"): rows.append(("Téléphone urgence chantier",sec["telephone_urgence"]))
-    if sec.get("chantier_nom"):      rows.append(("Nom du chantier",sec["chantier_nom"]))
-    if sec.get("chantier_numero"):   rows.append(("Numéro de chantier",sec["chantier_numero"]))
-    if sec.get("chantier_adresse"):  rows.append(("Adresse / Localisation",sec["chantier_adresse"]))
-    if sec.get("sst_noms"):          rows.append(("SST (Sauveteur Secouriste)",sec["sst_noms"]))
-    if sec.get("defibrillateur"):    rows.append(("Défibrillateur",sec["defibrillateur"]))
+    if sec.get("chantier_nom"):      rows.append(("Nom du chantier",            sec["chantier_nom"]))
+    if sec.get("chantier_numero"):   rows.append(("Numéro de chantier",         sec["chantier_numero"]))
+    if sec.get("chantier_adresse"):  rows.append(("Adresse / Localisation",     sec["chantier_adresse"]))
+    if sec.get("sst_noms"):          rows.append(("SST (Sauveteur Secouriste)", sec["sst_noms"]))
+    if sec.get("defibrillateur"):    rows.append(("Défibrillateur",             sec["defibrillateur"]))
     if rows: story.append(_info_table(rows))
     story.append(SP(8))
-    story.append(SubSectionHeader("7.2","Trousse de premiers soins")); story.append(SP(4))
-    story.append(P("Une trousse de secours par chef de chantier dans le fourgon, "
-                   "et une dans la base vie au minimum. Tenir à jour les boîtes de secours selon la liste "
-                   "établie avec la médecine du travail. Stocker à l'abri de la chaleur et de la lumière. "
-                   "Vérifier les dates de péremption régulièrement.","Body"))
+    story.append(SubSectionHeader("7.2","Trousse de premiers soins"))
     story.append(SP(4))
-    story.append(P("⚠ Il est interdit d'avoir des médicaments (type aspirine) dans la trousse de secours.","Body"))
+    story.append(P(
+        "Une trousse de secours par chef de chantier dans le fourgon, "
+        "et une dans la base vie au minimum. Tenir à jour les boîtes de secours selon la liste "
+        "établie avec la médecine du travail. Stocker à l'abri de la chaleur et de la lumière. "
+        "Vérifier les dates de péremption régulièrement.","Body"))
+    story.append(SP(4))
+    story.append(P(
+        "⚠ Il est interdit d'avoir des médicaments (type aspirine) dans la trousse de secours.",
+        "Body"))
     story.append(PageBreak())
 
 
 def _section_prevention(story, data):
-    prev=data.get("prevention",{})
-    epi_list=prev.get("epi",["Casque de chantier","Gilet haute visibilité","Chaussures ou bottes de sécurité"])
-    story.append(SectionHeader("8","MESURES GÉNÉRALES DE PRÉVENTION")); story.append(SP(6))
-    story.append(SubSectionHeader("8.1","Consignes de sécurité")); story.append(SP(4))
-    story.append(P("Afin de sensibiliser le personnel à sa présence sur site, les consignes réglementaires "
-                   "sont rappelées lors de la 1ère journée :","Body"))
-    for c in prev.get("consignes",["Port des EPI obligatoire","Arrêt des moteurs si possible","Interdiction de fumer"]):
+    prev     = data.get("prevention", {})
+    epi_list = prev.get("epi", ["Casque de chantier","Gilet haute visibilité",
+                                 "Chaussures ou bottes de sécurité"])
+    story.append(SectionHeader("8","MESURES GÉNÉRALES DE PRÉVENTION"))
+    story.append(SP(6))
+    story.append(SubSectionHeader("8.1","Consignes de sécurité"))
+    story.append(SP(4))
+    story.append(P("Afin de sensibiliser le personnel à sa présence sur site, les consignes "
+                   "réglementaires sont rappelées lors de la 1ère journée :","Body"))
+    for c in prev.get("consignes",["Port des EPI obligatoire",
+                                    "Arrêt des moteurs si possible",
+                                    "Interdiction de fumer"]):
         story.append(P("• "+c,"BulletItem"))
     story.append(SP(6))
-    story.append(SubSectionHeader("8.2","Équipements de protection individuelle (EPI)")); story.append(SP(4))
-    story.append(P("Sur ce chantier, toutes les personnes intervenantes doivent disposer des EPI suivants :","Body"))
+    story.append(SubSectionHeader("8.2","Équipements de protection individuelle (EPI)"))
+    story.append(SP(4))
+    story.append(P("Sur ce chantier, toutes les personnes intervenantes doivent disposer "
+                   "des EPI suivants :","Body"))
     for e in epi_list: story.append(P("• "+e,"BulletItem"))
     story.append(SP(6))
-    story.append(SubSectionHeader("8.3","Propreté et cheminement")); story.append(SP(4))
-    for p in prev.get("proprete",["Nettoyer régulièrement les postes de travail",
-                                   "Utiliser les zones de stockage prévues","Maintenir le cantonnement propre",
-                                   "Effectuer un nettoyage quotidien","Mettre à disposition des poubelles",
-                                   "Désencombrer les voies de circulation"]):
+    story.append(SubSectionHeader("8.3","Propreté et cheminement"))
+    story.append(SP(4))
+    for p in prev.get("proprete",[
+        "Nettoyer régulièrement les postes de travail",
+        "Utiliser les zones de stockage prévues pour le matériel",
+        "Maintenir le cantonnement propre en permanence",
+        "Effectuer un nettoyage quotidien du chantier",
+        "Mettre à disposition des poubelles et bennes pour le tri des déchets",
+        "Désencombrer les voies de circulation",
+    ]):
         story.append(P("• "+p,"BulletItem"))
-    if prev.get("remarques"): story.append(SP(6)); story.append(P(prev["remarques"],"Body"))
+    if prev.get("remarques"):
+        story.append(SP(6))
+        story.append(P(prev["remarques"],"Body"))
     story.append(PageBreak())
 
 
 def _section_risques(story, data):
-    risques=data.get("risques",[])
-    story.append(SectionHeader("","ANNEXE 1 — ÉVALUATION DES RISQUES")); story.append(SP(8))
+    risques = data.get("risques", [])
+    story.append(SectionHeader("","ANNEXE 1 — ÉVALUATION DES RISQUES"))
+    story.append(SP(8))
     if not risques:
-        story.append(P("Aucune phase de travail renseignée.","Body")); story.append(PageBreak()); return
+        story.append(P("Aucune phase de travail renseignée.","Body"))
+        story.append(PageBreak()); return
 
     story.append(SubSectionHeader("","Grille de lecture")); story.append(SP(4))
-    hw2=CONTENT_W/2
-    gt=Table([[P("Dangerosité","TH"),P("Indice","TH"),P("Exposition","TH"),P("Indice","TH")],
-              [P("Blessure légère, sans arrêt de travail","TD"),P("1","TD_C"),P("Exposition occasionnelle","TD"),P("1","TD_C")],
-              [P("Atteinte sans effets irréversibles, avec arrêt","TD"),P("10","TD_C"),P("Exposition intermittente","TD"),P("2","TD_C")],
-              [P("Effets irréversibles / incapacité permanente","TD"),P("100","TD_C"),P("Exposition fréquente","TD"),P("3","TD_C")],
-              [P("Danger de mort","TD"),P("1000","TD_C"),P("Exposition permanente","TD"),P("4","TD_C")]],
-             colWidths=[hw2*0.8,hw2*0.2,hw2*0.8,hw2*0.2])
+    hw2 = CONTENT_W / 2
+    gt = Table([
+        [P("Dangerosité","TH"),P("Indice","TH"),P("Exposition","TH"),P("Indice","TH")],
+        [P("Blessure légère, sans arrêt de travail","TD"),P("1","TD_C"),
+         P("Exposition occasionnelle","TD"),P("1","TD_C")],
+        [P("Atteinte sans effets irréversibles, avec arrêt","TD"),P("10","TD_C"),
+         P("Exposition intermittente","TD"),P("2","TD_C")],
+        [P("Effets irréversibles / incapacité permanente","TD"),P("100","TD_C"),
+         P("Exposition fréquente","TD"),P("3","TD_C")],
+        [P("Danger de mort","TD"),P("1000","TD_C"),
+         P("Exposition permanente","TD"),P("4","TD_C")],
+    ], colWidths=[hw2*0.8, hw2*0.2, hw2*0.8, hw2*0.2])
     gt.setStyle(TableStyle([
-        ("BACKGROUND",(0,0),(-1,0),NAVY_MID),("GRID",(0,0),(-1,-1),0.3,GREY_LINE),
-        ("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3),
-        ("LEFTPADDING",(0,0),(-1,-1),5),("ROWBACKGROUNDS",(0,1),(-1,-1),[WHITE,ROW_ALT]),
+        ("BACKGROUND",    (0,0), (-1,0), NAVY_MID),
+        ("GRID",          (0,0), (-1,-1), 0.3, GREY_LINE),
+        ("TOPPADDING",    (0,0), (-1,-1), 3),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 3),
+        ("LEFTPADDING",   (0,0), (-1,-1), 5),
+        ("ROWBACKGROUNDS",(0,1), (-1,-1), [WHITE, ROW_ALT]),
     ]))
     story.append(gt); story.append(SP(10))
 
-    col_w=[2.5*cm,2.2*cm,3*cm,2.5*cm,1.2*cm,1.2*cm,1.2*cm,CONTENT_W-13.8*cm]
-    risk_data=[[P("Phase de\ntravail","TH"),P("Facteur de\nrisque","TH"),P("Situation\nà risque","TH"),
-                P("Risques\nidentifiés","TH"),P("Danger.\n(D)","TH"),P("Expo.\n(E)","TH"),
-                P("Prio.\n(D×E)","TH"),P("Mesures de\nprévention","TH")]]
-    DANGER_COLORS={1:colors.HexColor("#C8E6C9"),10:colors.HexColor("#FFF9C4"),
-                   100:colors.HexColor("#FFCCBC"),1000:colors.HexColor("#EF9A9A")}
+    col_w = [2.5*cm, 2.2*cm, 3*cm, 2.5*cm, 1.2*cm, 1.2*cm, 1.2*cm, CONTENT_W - 13.8*cm]
+    DANGER_COLORS = {1:   colors.HexColor("#C8E6C9"),
+                     10:  colors.HexColor("#FFF9C4"),
+                     100: colors.HexColor("#FFCCBC"),
+                     1000:colors.HexColor("#EF9A9A")}
+    risk_data = [[P("Phase de\ntravail","TH"), P("Facteur de\nrisque","TH"),
+                  P("Situation\nà risque","TH"), P("Risques\nidentifiés","TH"),
+                  P("Danger.\n(D)","TH"), P("Expo.\n(E)","TH"),
+                  P("Prio.\n(D×E)","TH"), P("Mesures de\nprévention","TH")]]
     for r in risques:
-        d_val=r.get("dangerosité",r.get("dangerosite",1)); e_val=r.get("exposition",1)
-        try: prio=int(d_val)*int(e_val)
-        except: prio=""
-        risk_data.append([P(r.get("phase",""),"Risk_Phase"),P(r.get("facteur_risque",""),"Risk_Cell"),
-                           P(r.get("situation",""),"Risk_Cell"),P(r.get("risques",""),"Risk_Cell"),
-                           P(str(d_val),"TD_C"),P(str(e_val),"TD_C"),P(str(prio),"TD_C"),
-                           P(r.get("mesures",""),"Risk_Cell")])
-    risk_table=Table(risk_data,colWidths=col_w,repeatRows=1)
-    ts=[("BACKGROUND",(0,0),(-1,0),NAVY),("GRID",(0,0),(-1,-1),0.3,GREY_LINE),
-        ("VALIGN",(0,0),(-1,-1),"TOP"),("TOPPADDING",(0,0),(-1,-1),3),
-        ("BOTTOMPADDING",(0,0),(-1,-1),3),("LEFTPADDING",(0,0),(-1,-1),4),("RIGHTPADDING",(0,0),(-1,-1),4)]
-    for i,r in enumerate(risques,start=1):
-        try: d_int=int(r.get("dangerosité",r.get("dangerosite",1)))
-        except: d_int=1
+        d_val = r.get("dangerosité", r.get("dangerosite",1))
+        e_val = r.get("exposition",1)
+        try:   prio = int(d_val)*int(e_val)
+        except:prio = ""
+        risk_data.append([
+            P(r.get("phase",""),"Risk_Phase"),
+            P(r.get("facteur_risque",""),"Risk_Cell"),
+            P(r.get("situation",""),"Risk_Cell"),
+            P(r.get("risques",""),"Risk_Cell"),
+            P(str(d_val),"TD_C"), P(str(e_val),"TD_C"), P(str(prio),"TD_C"),
+            P(r.get("mesures",""),"Risk_Cell"),
+        ])
+    risk_table = Table(risk_data, colWidths=col_w, repeatRows=1)
+    ts = [("BACKGROUND",(0,0),(-1,0),NAVY), ("GRID",(0,0),(-1,-1),0.3,GREY_LINE),
+          ("VALIGN",(0,0),(-1,-1),"TOP"),
+          ("TOPPADDING",(0,0),(-1,-1),3), ("BOTTOMPADDING",(0,0),(-1,-1),3),
+          ("LEFTPADDING",(0,0),(-1,-1),4), ("RIGHTPADDING",(0,0),(-1,-1),4)]
+    for i, r in enumerate(risques, start=1):
+        try:   d_int = int(r.get("dangerosité",r.get("dangerosite",1)))
+        except:d_int = 1
         ts.append(("BACKGROUND",(4,i),(6,i),DANGER_COLORS.get(d_int,WHITE)))
         ts.append(("BACKGROUND",(0,i),(3,i),WHITE if i%2==0 else ROW_ALT))
         ts.append(("BACKGROUND",(7,i),(7,i),WHITE if i%2==0 else ROW_ALT))
@@ -684,54 +831,75 @@ def _section_risques(story, data):
 
 
 def _section_accident(story, data):
-    sec=data.get("secours",{}); proj=data.get("projet",{})
+    sec  = data.get("secours", {})
+    proj = data.get("projet", {})
     story.append(SectionHeader("","ANNEXE 2 — EN CAS D'ACCIDENT")); story.append(SP(10))
-    ut=Table([[P("EN CAS D'ACCIDENT","Cover_Title")],
-              [P("Appelez le sauveteur secouriste du travail qui, après avoir examiné la victime,\n"
-                 "vous demandera d'appeler les secours.","Cover_Subtitle")]],colWidths=[CONTENT_W])
+    ut = Table([
+        [P("EN CAS D'ACCIDENT","Cover_Title")],
+        [P("Appelez le sauveteur secouriste du travail qui, après avoir examiné la victime,\n"
+           "vous demandera d'appeler les secours.","Cover_Subtitle")],
+    ], colWidths=[CONTENT_W])
     ut.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),NAVY),
-                             ("TOPPADDING",(0,0),(-1,-1),12),("BOTTOMPADDING",(0,0),(-1,-1),12)]))
+                             ("TOPPADDING",(0,0),(-1,-1),12),
+                             ("BOTTOMPADDING",(0,0),(-1,-1),12)]))
     story.append(ut); story.append(SP(12))
     if sec.get("telephone_urgence"):
-        tt2=Table([[P(f"Téléphonez au : {sec['telephone_urgence']}","Cover_Client")]],colWidths=[CONTENT_W])
+        tt2 = Table([[P(f"Téléphonez au : {sec['telephone_urgence']}","Cover_Client")]],
+                    colWidths=[CONTENT_W])
         tt2.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),NAVY_LITE),
-                                  ("TOPPADDING",(0,0),(-1,-1),10),("BOTTOMPADDING",(0,0),(-1,-1),10),
+                                  ("TOPPADDING",(0,0),(-1,-1),10),
+                                  ("BOTTOMPADDING",(0,0),(-1,-1),10),
                                   ("BOX",(0,0),(-1,-1),1,NAVY)]))
         story.append(tt2)
     story.append(SP(10))
-    rows=[]
-    if proj.get("intitule"):        rows.append(("Chantier",proj["intitule"]))
-    if proj.get("client"):          rows.append(("Client",proj["client"]))
-    if sec.get("chantier_adresse"): rows.append(("Adresse",sec["chantier_adresse"]))
-    if sec.get("sst_noms"):         rows.append(("SST (Sauveteur Secouriste)",sec["sst_noms"]))
-    if sec.get("defibrillateur"):   rows.append(("Défibrillateur le plus proche",sec["defibrillateur"]))
-    if rows: story.append(P("À RETENIR :","H2")); story.append(_info_table(rows))
-    story.append(SP(8)); story.append(P("Consignes au téléphone :","H2"))
-    for c in ["Précisez la nature de l'accident (ex : éboulement, asphyxie, chute…)",
-               "Précisez la position du blessé et s'il y a nécessité de dégagement",
-               "Signalez le nombre de blessés et leur état","Décrivez l'intervention du secouriste",
-               "Fixez un point de rendez-vous et envoyez quelqu'un guider les secours",
-               "Faites répéter le message — Ne raccrochez jamais le premier"]:
+    rows = []
+    if proj.get("intitule"):        rows.append(("Chantier",                     proj["intitule"]))
+    if proj.get("client"):          rows.append(("Client",                        proj["client"]))
+    if sec.get("chantier_adresse"): rows.append(("Adresse",                       sec["chantier_adresse"]))
+    if sec.get("sst_noms"):         rows.append(("SST (Sauveteur Secouriste)",     sec["sst_noms"]))
+    if sec.get("defibrillateur"):   rows.append(("Défibrillateur le plus proche", sec["defibrillateur"]))
+    if rows:
+        story.append(P("À RETENIR :","H2"))
+        story.append(_info_table(rows))
+    story.append(SP(8))
+    story.append(P("Consignes au téléphone :","H2"))
+    for c in [
+        "Précisez la nature de l'accident (ex : éboulement, asphyxie, chute…)",
+        "Précisez la position du blessé et s'il y a nécessité de dégagement",
+        "Signalez le nombre de blessés et leur état",
+        "Décrivez l'intervention du secouriste",
+        "Fixez un point de rendez-vous et envoyez quelqu'un guider les secours",
+        "Faites répéter le message — Ne raccrochez jamais le premier",
+    ]:
         story.append(P("• "+c,"BulletItem"))
     story.append(PageBreak())
 
 
 def _section_emargement(story, data):
-    signataires=data.get("signataires",[])
+    signataires = data.get("signataires", [])
     story.append(SectionHeader("","ANNEXE 3 — ÉMARGEMENT DE L'ÉQUIPE")); story.append(SP(8))
-    story.append(P("L'équipe qui réalise les travaux doit être sensibilisée aux risques et aux mesures "
-                   "de prévention. Le conducteur de travaux et/ou le chef de chantier communique le PPSPS "
-                   "à son équipe le 1er jour du démarrage du chantier et avant le commencement des travaux. "
-                   "Tout nouvel arrivant doit également prendre connaissance du PPSPS et le signer.","Body"))
+    story.append(P(
+        "L'équipe qui réalise les travaux doit être sensibilisée aux risques et aux mesures "
+        "de prévention. Le conducteur de travaux et/ou le chef de chantier communique le PPSPS "
+        "à son équipe le 1er jour du démarrage du chantier et avant le commencement des travaux. "
+        "Tout nouvel arrivant doit également prendre connaissance du PPSPS et le signer.","Body"))
     story.append(SP(10))
-    em_data=[[P("NOM + Prénom","TH"),P("Entreprise / Agence d'intérim","TH"),P("Signature","TH")]]+\
-            [[P(s.get("nom",""),"TD"),P(s.get("entreprise",""),"TD"),P("","TD")] for s in signataires]+\
-            [[P("","TD"),P("","TD"),P("","TD")] for _ in range(max(10-len(signataires),5))]
-    emat=Table(em_data,colWidths=[CONTENT_W*0.35,CONTENT_W*0.35,CONTENT_W*0.30])
+    em_data = (
+        [[P("NOM + Prénom","TH"), P("Entreprise / Agence d'intérim","TH"), P("Signature","TH")]] +
+        [[P(s.get("nom",""),"TD"), P(s.get("entreprise",""),"TD"), P("","TD")]
+         for s in signataires] +
+        [[P("","TD"), P("","TD"), P("","TD")]
+         for _ in range(max(10 - len(signataires), 5))]
+    )
+    emat = Table(em_data,
+                 colWidths=[CONTENT_W*0.35, CONTENT_W*0.35, CONTENT_W*0.30])
     emat.setStyle(TableStyle([
-        ("BACKGROUND",(0,0),(-1,0),NAVY_MID),("GRID",(0,0),(-1,-1),0.3,GREY_LINE),
-        ("TOPPADDING",(0,0),(-1,-1),14),("BOTTOMPADDING",(0,0),(-1,-1),14),
-        ("LEFTPADDING",(0,0),(-1,-1),6),("ROWBACKGROUNDS",(0,1),(-1,-1),[WHITE,ROW_ALT]),
+        ("BACKGROUND",    (0,0), (-1,0), NAVY_MID),
+        ("GRID",          (0,0), (-1,-1), 0.3, GREY_LINE),
+        ("TOPPADDING",    (0,0), (-1,-1), 14),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 14),
+        ("LEFTPADDING",   (0,0), (-1,-1), 6),
+        ("ROWBACKGROUNDS",(0,1), (-1,-1), [WHITE, ROW_ALT]),
     ]))
     story.append(emat)
 
@@ -740,28 +908,49 @@ def _section_emargement(story, data):
 # FONCTION PRINCIPALE
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def generer_ppsps(data: dict, logo_path: str = None) -> io.BytesIO:
+def generer_ppsps(data: dict,
+                  logo_path: str = None,
+                  logo_path_header: str = None) -> io.BytesIO:
     """
-    Génère le PPSPS complet. Retourne un BytesIO contenant le PDF.
-    logo_path : chemin vers le PNG du logo (optionnel).
+    Génère le PPSPS complet et retourne un BytesIO contenant le PDF.
+
+    logo_path        : PNG couleur utilisé sur la page de couverture.
+    logo_path_header : PNG blanc utilisé dans les en-têtes de pages.
+                       Si absent, logo_path est utilisé en fallback.
     """
-    buf=io.BytesIO()
-    ent=data.get("entreprise",{}); proj=data.get("projet",{})
-    on_first,on_later=_make_page_template(ent.get("nom",""),proj.get("intitule",""),logo_path=logo_path)
-    doc=SimpleDocTemplate(buf,pagesize=A4,leftMargin=ML,rightMargin=MR,
-                          topMargin=MT+HEADER_H,bottomMargin=MB+20,
-                          title="PPSPS – "+(proj.get("intitule","") or ""),author=ent.get("nom",""))
-    story=[]
-    _page_cover(story,data,logo_path=logo_path)
-    _section_gestion(story,data)
-    _section_presentation(story,data)
-    _section_intervenants(story,data)
-    _section_organisation(story,data)
-    _section_secours(story,data)
-    _section_prevention(story,data)
-    _section_risques(story,data)
-    _section_accident(story,data)
-    _section_emargement(story,data)
-    doc.build(story,onFirstPage=on_first,onLaterPages=on_later)
+    buf  = io.BytesIO()
+    ent  = data.get("entreprise", {})
+    proj = data.get("projet", {})
+
+    on_first, on_later = _make_page_template(
+        ent.get("nom",""),
+        proj.get("intitule",""),
+        logo_path=logo_path,
+        logo_path_header=logo_path_header,
+    )
+
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=A4,
+        leftMargin=ML, rightMargin=MR,
+        topMargin=MT + HEADER_H,
+        bottomMargin=MB + 20,
+        title="PPSPS – " + (proj.get("intitule","") or ""),
+        author=ent.get("nom",""),
+    )
+
+    story = []
+    _page_cover(story, data, logo_path=logo_path)
+    _section_gestion(story, data)
+    _section_presentation(story, data)
+    _section_intervenants(story, data)
+    _section_organisation(story, data)
+    _section_secours(story, data)
+    _section_prevention(story, data)
+    _section_risques(story, data)
+    _section_accident(story, data)
+    _section_emargement(story, data)
+
+    doc.build(story, onFirstPage=on_first, onLaterPages=on_later)
     buf.seek(0)
     return buf
