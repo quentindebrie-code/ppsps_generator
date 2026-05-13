@@ -767,7 +767,7 @@ def _section_risques(story, data):
     story.append(SectionHeader("","ANNEXE 1 — ÉVALUATION DES RISQUES"))
     story.append(SP(8))
     if not risques:
-        story.append(P("Aucune phase de travail renseignée.","Body"))
+        story.append(P("Voir Annexe 1 - Évaluation des risques","Body"))
         story.append(PageBreak()); return
 
     story.append(SubSectionHeader("","Grille de lecture")); story.append(SP(4))
