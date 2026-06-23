@@ -587,7 +587,18 @@ elif tab == 7:
         nb_membres = int(g("nb_membres", 2))
         nb_sign = int(g("nb_sign", 0))
 
-        suivis = [{"indice": g(f"rev_ind_{i}", "A" if i==0 else ""),
+        suivis = [{"indice": g(f"rev_ind_{i}", "A" if i==0 else ""efada z
+        f
+        qkl$t
+            '     rrzrer
+            aekaert^ppùoz    -ép('
+            zrée
+            fa(éz
+            zf     am,f    rd
+            zr    
+            EM,ML    ,'É(^PRO-)$ 
+            r zk^
+            ),
                    "date": g(f"rev_date_{i}"),
                    "nature": g(f"rev_nat_{i}", "Création du document" if i==0 else "")}
                   for i in range(nb_rev)]
