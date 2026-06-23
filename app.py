@@ -87,6 +87,12 @@ for _k, _v in ENTREPRISE_FIXE.items():
 # pour CHAQUE opération. S'il devait varier selon les chantiers, déplacer la clé
 # "csps_*" hors de PREVENTION_FIXE et la repasser en champ éditable (voir section 3).
 PREVENTION_FIXE = {
+    # Coordinateur SPS
+    "csps_nom": "ELYFEC SPS",
+    "csps_adr": "16 rue du Cassé 31240 SAINT-JEAN",
+    "csps_int": "",
+    "csps_tel": "05.61.16.61.79",
+    "csps_em": "",
     # Inspection du travail
     "it_nom": "D.I.R.E.C.C.T.E",
     "it_adr": "44, Boulevard Maréchal Lannes Cantepau BP 18 81027 ALBI CEDEX 9",
@@ -587,18 +593,7 @@ elif tab == 7:
         nb_membres = int(g("nb_membres", 2))
         nb_sign = int(g("nb_sign", 0))
 
-        suivis = [{"indice": g(f"rev_ind_{i}", "A" if i==0 else ""efada z
-        f
-        qkl$t
-            '     rrzrer
-            aekaert^ppùoz    -ép('
-            zrée
-            fa(éz
-            zf     am,f    rd
-            zr    
-            EM,ML    ,'É(^PRO-)$ 
-            r zk^
-            ),
+        suivis = [{"indice": g(f"rev_ind_{i}", "A" if i==0 else ""),
                    "date": g(f"rev_date_{i}"),
                    "nature": g(f"rev_nat_{i}", "Création du document" if i==0 else "")}
                   for i in range(nb_rev)]
