@@ -87,12 +87,6 @@ for _k, _v in ENTREPRISE_FIXE.items():
 # pour CHAQUE opération. S'il devait varier selon les chantiers, déplacer la clé
 # "csps_*" hors de PREVENTION_FIXE et la repasser en champ éditable (voir section 3).
 PREVENTION_FIXE = {
-    # Coordinateur SPS
-    "csps_nom": "ELYFEC SPS",
-    "csps_adr": "16 rue du Cassé 31240 SAINT-JEAN",
-    "csps_int": "",
-    "csps_tel": "05.61.16.61.79",
-    "csps_em": "",
     # Inspection du travail
     "it_nom": "D.I.R.E.C.C.T.E",
     "it_adr": "44, Boulevard Maréchal Lannes Cantepau BP 18 81027 ALBI CEDEX 9",
