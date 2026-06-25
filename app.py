@@ -103,18 +103,6 @@ PREVENTION_FIXE = {
 for _k, _v in PREVENTION_FIXE.items():
     st.session_state[f"_p_{_k}"] = _v
 
-# ── Coordinateur SPS : éditable, mais pré-rempli par défaut ────────────────
-# Le CSPS est désigné par le maître d'ouvrage pour chaque opération : il reste
-# donc modifiable. On ne fait que SEMER une valeur par défaut (setdefault) la
-# première fois — les saisies et imports ultérieurs ne sont jamais écrasés.
-CSPS_DEFAUT = {
-    "csps_nom": "ELYFEC SPS",
-    "csps_adr": "16 rue du Cassé 31240 SAINT-JEAN",
-    "csps_tel": "05.61.16.61.79",
-}
-for _k, _v in CSPS_DEFAUT.items():
-    st.session_state.setdefault(f"_p_{_k}", _v)
-
 # ── Raccourcis lecture / écriture persistance ─────────────────────────────
 def g(key, default=""):
     """Lire la valeur persistée d'un champ (ou default si pas encore saisie)."""
